@@ -1,0 +1,12 @@
+.current-label label {
+    font-weight: bold;
+    color: red;
+    background-color: yellow;
+    color: red;
+}
+.previous-label label {
+    color: #00008b;
+}
+.preprevious-label label {
+    color: black;
+}

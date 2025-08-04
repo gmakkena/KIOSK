@@ -1,0 +1,14 @@
+window {
+    background-color: peachpuff;
+}
+
+paned > separator {
+  background: transparent;
+  min-width: 0px;
+  min-height: 0px;
+}
+.glow-effect {
+  border: 3px #00CED1;
+  box-shadow: 0 0 20px #00CED1;
+  border-radius: 10px;
+}

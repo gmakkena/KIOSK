@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk+" version="3.0"/>
+  <object class="GtkWindow" id="window1">
+    <property name="can_focus">False</property>
+    <property name="default_width">800</property>
+    <property name="default_height">480</property>
+    <property name="title">Token Display</property>
+    <property name="window_position">center</property>
+    <child>
+      <object class="GtkBox" id="main_box">
+        <property name="orientation">vertical</property>
+        <property name="halign">fill</property>
+        <property name="valign">fill</property>
+        <property name="spacing">10</property>
+        <property name="margin">20</property>
+
+        <child>
+          <object class="GtkLabel" id="label_current">
+            <property name="label">Current: 000</property>
+            <property name="halign">center</property>
+            <property name="valign">center</property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
+            <attributes>
+              <attribute name="scale" value="2.0"/>
+            </attributes>
+          </object>
+        </child>
+
+        <child>
+          <object class="GtkLabel" id="label_previous">
+            <property name="label">Previous: 000</property>
+            <property name="halign">center</property>
+            <property name="valign">center</property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
+            <attributes>
+              <attribute name="scale" value="1.5"/>
+            </attributes>
+          </object>
+        </child>
+
+        <child>
+          <object class="GtkLabel" id="label_preprevious">
+            <property name="label">Before That: 000</property>
+            <property name="halign">center</property>
+            <property name="valign">center</property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
+            <attributes>
+              <attribute name="scale" value="1.2"/>
+            </attributes>
+          </object>
+        </child>
+
+      </object>
+    </child>
+  </object>
+</interface>
