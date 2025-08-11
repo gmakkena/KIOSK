@@ -285,17 +285,17 @@ void *serial_reader_thread(void *arg) {
             sscanf(buf, "%31s", token);
 
             if (strcmp(token, "C1") == 0) {
-                mpv_play_gif("congratulations1.gif");
-            } else if (strcmp(token, "G1") == 0) {
-                mpv_play_gif("gameover1.gif");
-                strcpy(current_token, "--");
-                strcpy(previous_token, "--");
-                strcpy(preceding_token, "--");
-            } else {
-                mpv_stop_gif();
-                shift_tokens(token);
-                g_idle_add(update_ui_from_serial, NULL);
-            }
+    mpv_play_gif("congratulations1.gif");
+} else if (strcmp(token, "G1") == 0) {
+    mpv_play_gif("gameover1.gif");
+    strcpy(current_token, "--");
+    strcpy(previous_token, "--");
+    strcpy(preceding_token, "--");
+} else {
+    mpv_stop_gif();
+    shift_tokens(token);
+    g_idle_add(update_ui_from_serial, NULL);
+}
         }
         usleep(100000);
     }
