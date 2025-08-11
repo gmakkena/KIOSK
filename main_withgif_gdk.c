@@ -168,6 +168,20 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     // Create new fullscreen window
     gif_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_decorated(GTK_WINDOW(gif_window), FALSE);
+    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(gif_window), TRUE);
+    gtk_window_set_skip_pager_hint(GTK_WINDOW(gif_window), TRUE);
+    
+    // Set window type hint to ensure it stays on top
+    gtk_window_set_type_hint(GTK_WINDOW(gif_window), GDK_WINDOW_TYPE_HINT_SPLASHSCREEN);
+    
+    // Force fullscreen on primary monitor
+    GdkScreen *screen = gdk_screen_get_default();
+    GdkMonitor *primary = gdk_display_get_primary_monitor(gdk_screen_get_display(screen));
+    GdkRectangle geometry;
+    gdk_monitor_get_geometry(primary, &geometry);
+    
+    gtk_window_move(GTK_WINDOW(gif_window), geometry.x, geometry.y);
+    gtk_window_set_default_size(GTK_WINDOW(gif_window), geometry.width, geometry.height);
     gtk_window_fullscreen(GTK_WINDOW(gif_window));
     gtk_window_set_keep_above(GTK_WINDOW(gif_window), TRUE);
 
@@ -264,9 +278,13 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
 
     // Show window before starting animation
     gtk_widget_show_all(gif_window);
-
-    // Start animation timer
-    gif_player->timeout_id = g_timeout_add(10, gif_player_advance, NULL);
+    
+    // Force window to top after showing
+    gtk_window_present(GTK_WINDOW(gif_window));
+    gdk_window_focus(gtk_widget_get_window(gif_window), GDK_CURRENT_TIME);
+    
+    // Start animation timer with slightly faster refresh rate
+    gif_player->timeout_id = g_timeout_add(16, gif_player_advance, NULL);
     if (gif_player->timeout_id == 0) {
         g_printerr("Failed to create animation timer\n");
         gif_player_cleanup();
@@ -514,9 +532,23 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    gtk_window_fullscreen(GTK_WINDOW(window));
+    // Setup main window to be immovable and always visible
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
-
+    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window), TRUE);
+    gtk_window_set_skip_pager_hint(GTK_WINDOW(window), TRUE);
+    
+    // Force window position on primary monitor
+    GdkScreen *screen = gdk_screen_get_default();
+    GdkMonitor *primary = gdk_display_get_primary_monitor(gdk_screen_get_display(screen));
+    GdkRectangle geometry;
+    gdk_monitor_get_geometry(primary, &geometry);
+    
+    gtk_window_move(GTK_WINDOW(window), geometry.x, geometry.y);
+    gtk_window_fullscreen(GTK_WINDOW(window));
+    
+    // Prevent window from being moved
+    g_signal_connect(window, "configure-event", G_CALLBACK(gtk_true), NULL);
+    
     GtkCssProvider *css_provider = gtk_css_provider_new();
     gtk_css_provider_load_from_path(css_provider, "style.css", NULL);
     gtk_style_context_add_provider_for_screen(
