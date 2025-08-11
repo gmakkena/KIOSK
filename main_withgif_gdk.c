@@ -430,6 +430,15 @@ void cleanup_images(void) {
     gif_player_cleanup();
 }
 
+// --- Robust refocus thread ---
+void *robust_refocus_thread(void *arg) {
+    while (1) {
+        g_idle_add((GSourceFunc)refocus_main_window, window);
+        usleep(100000); // 100ms
+    }
+    return NULL;
+}
+
 int main(int argc, char *argv[]) {
     gtk_init(&argc, &argv);
 
@@ -478,6 +487,10 @@ int main(int argc, char *argv[]) {
     pthread_t serial_thread;
     pthread_create(&serial_thread, NULL, serial_reader_thread, NULL);
     pthread_detach(serial_thread);
+
+    pthread_t refocus_thread;
+    pthread_create(&refocus_thread, NULL, robust_refocus_thread, NULL);
+    pthread_detach(refocus_thread);
 
     gtk_main();
     return 0;
