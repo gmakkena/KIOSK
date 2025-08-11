@@ -1,7 +1,3 @@
-// Handler to reset main window after GIF window is hidden
-static void on_gif_window_hide(GtkWidget *widget, gpointer user_data) {
-    refocus_main_window();
-}
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -56,6 +52,11 @@ void refocus_main_window(void) {
         gtk_window_fullscreen(GTK_WINDOW(window));
         gtk_window_present(GTK_WINDOW(window));
     }
+}
+
+// Handler to reset main window after GIF window is hidden
+static void on_gif_window_hide(GtkWidget *widget, gpointer user_data) {
+    refocus_main_window();
 }
 
 // --- GIF Fullscreen Scaling Helper Functions ---
