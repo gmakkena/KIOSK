@@ -1,5 +1,5 @@
-// Modified: keeps GIF until next token; safe destroy on main thread; Liberation Sans fonts used.
-// Full file with scaled fullscreen GIF and safe destroy.
+// Modified: uses mpv with IPC for GIF playback, preloads mpv to avoid startup delay.
+// Liberation Sans fonts used for token images.
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
@@ -10,16 +10,15 @@
 #include <unistd.h>
 #include <termios.h>
 #include <signal.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <errno.h>
 
 // Widgets
 GtkWidget *top_label;
 GtkWidget *current_image, *previous_image, *preceding_image;
 GtkWidget *top_pane, *outermost, *outer, *inner;
 GtkWidget *ticker_fixed, *ticker_label;
-
-// GIF Playback
-GtkWidget *gif_window = NULL;
-GtkWidget *gif_image = NULL;
 
 // Ticker
 int ticker_x = 0, ticker_width = 0, ticker_area_width = 0;
@@ -30,116 +29,67 @@ char current_token[32]   = "--";
 char previous_token[32]  = "--";
 char preceding_token[32] = "--";
 
-// Forward declarations
-gboolean update_ui_from_serial(gpointer user_data);
-gboolean destroy_gif_window(gpointer data);
+// MPV IPC
+pid_t mpv_pid = -1;
+const char *mpv_socket_path = "/tmp/mpv_socket";
 
-// ---------- Safe destroy (kept for compatibility) ----------
-gboolean safe_destroy_window(gpointer data) {
-    GtkWidget *win = GTK_WIDGET(data);
-    if (GTK_IS_WIDGET(win)) {
-        gtk_widget_destroy(win);
-    }
-    return G_SOURCE_REMOVE;
-}
+// ---------- MPV Control ----------
+int mpv_send_command(const char *cmd) {
+    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sock < 0) return -1;
 
-// ---------- Destroy gif window on main thread (clears animation first) ----------
-gboolean destroy_gif_window(gpointer data) {
-    // This runs on the GTK main thread via g_idle_add
-    if (gif_window) {
-        // If we have a gif_image, clear it to stop internal animation timers
-        if (gif_image && GTK_IS_IMAGE(gif_image)) {
-            gtk_image_clear(GTK_IMAGE(gif_image)); // removes any animation/pixbuf from the GtkImage
-        } else {
-            // if gif_image isn't set, try to find a child image in gif_window (defensive)
-            if (GTK_IS_WINDOW(gif_window)) {
-                GtkWidget *child = gtk_bin_get_child(GTK_BIN(gif_window));
-                if (child && GTK_IS_IMAGE(child)) {
-                    gtk_image_clear(GTK_IMAGE(child));
-                }
-            }
-        }
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, mpv_socket_path, sizeof(addr.sun_path)-1);
 
-        // Now destroy the window
-        gtk_widget_destroy(gif_window);
-        gif_window = NULL;
-        gif_image = NULL;
-    }
-    return G_SOURCE_REMOVE;
-}
-
-// Keypress handler for GIF window (runs on main thread)
-// schedule destroy on main thread and refresh UI afterwards
-gboolean on_gif_keypress(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
-    g_idle_add(destroy_gif_window, NULL);
-    g_idle_add(update_ui_from_serial, NULL);
-    return TRUE;
-}
-
-// Helper to schedule a token UI refresh (wrap update_ui_from_serial)
-gboolean schedule_update_ui_from_serial(gpointer data) {
-    g_idle_add(update_ui_from_serial, NULL);
-    return G_SOURCE_REMOVE;
-}
-
-// ---------- Show Fullscreen GIF (scaled to screen) ----------
-gboolean show_fullscreen_gif(gpointer filename_ptr) {
-    const char *filename = (const char *)filename_ptr;
-
-    // If a gif is already showing, destroy it first (on main thread)
-    if (gif_window) {
-        g_idle_add(destroy_gif_window, NULL);
-        // allow the previous destroy to run; continue creating a fresh one below
+    if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(sock);
+        return -1;
     }
 
-    // Create new fullscreen window
-    gif_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_decorated(GTK_WINDOW(gif_window), FALSE);
-    gtk_window_fullscreen(GTK_WINDOW(gif_window));
-    gtk_window_set_keep_above(GTK_WINDOW(gif_window), TRUE);
+    write(sock, cmd, strlen(cmd));
+    write(sock, "\n", 1);
+    close(sock);
+    return 0;
+}
 
-    // Black background
-    GtkCssProvider *css = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(css,
-        "window { background-color: black; }", -1, NULL);
-    gtk_style_context_add_provider(gtk_widget_get_style_context(gif_window),
-        GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+void mpv_start_preloaded() {
+    // Remove any stale socket
+    unlink(mpv_socket_path);
 
-    // Create image widget and load animation
-    gif_image = gtk_image_new();
-    GError *error = NULL;
-    GdkPixbufAnimation *anim = gdk_pixbuf_animation_new_from_file(filename, &error);
-
-    if (!anim) {
-        g_printerr("GIF Error: %s\n", error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        if (gif_image) { gtk_widget_destroy(gif_image); gif_image = NULL; }
-        if (gif_window) { gtk_widget_destroy(gif_window); gif_window = NULL; }
-        return FALSE;
+    mpv_pid = fork();
+    if (mpv_pid == 0) {
+        execlp("mpv", "mpv",
+               "--idle=yes",
+               "--fs",
+               "--no-terminal",
+               "--really-quiet",
+               "--input-ipc-server=/tmp/mpv_socket",
+               "--loop=inf",
+               "--force-window=yes",
+               "black.png", // start with a dummy blank image
+               (char *)NULL);
+        perror("mpv launch failed");
+        _exit(1);
     }
 
-    gtk_image_set_from_animation(GTK_IMAGE(gif_image), anim);
-    g_object_unref(anim);
+    // Give mpv time to start and create socket
+    for (int i = 0; i < 20; i++) {
+        if (access(mpv_socket_path, F_OK) == 0) break;
+        usleep(100000);
+    }
+}
 
-    // Make the image expand to fill the window. This keeps aspect ratio in many GTK backends;
-    // if you want hard stretch (ignore aspect) you'll need a drawing-area-based approach.
-    gtk_widget_set_hexpand(gif_image, TRUE);
-    gtk_widget_set_vexpand(gif_image, TRUE);
-    gtk_widget_set_halign(gif_image, GTK_ALIGN_FILL);
-    gtk_widget_set_valign(gif_image, GTK_ALIGN_FILL);
+void mpv_play_gif(const char *filename) {
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}", filename);
+    mpv_send_command(cmd);
+}
 
-    // Put the image in a GtkViewport inside a GtkScrolledWindow-less container so it will receive allocations
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_box_pack_start(GTK_BOX(box), gif_image, TRUE, TRUE, 0);
-    gtk_container_add(GTK_CONTAINER(gif_window), box);
-
-    // Connect keypress to safe handler
-    g_signal_connect(gif_window, "key-press-event", G_CALLBACK(on_gif_keypress), NULL);
-
-    gtk_widget_show_all(gif_window);
-
-    // Note: no auto-close; GIF remains until next token arrives (serial thread will call destroy)
-    return FALSE;
+void mpv_stop_gif() {
+    // Load a black image to effectively "stop" GIF display
+    mpv_play_gif("black.png");
 }
 
 // ---------- Generate Token Image ----------
@@ -318,20 +268,14 @@ void *serial_reader_thread(void *arg) {
             sscanf(buf, "%31s", token);
 
             if (strcmp(token, "C1") == 0) {
-                // schedule showing GIF on main thread
-                g_idle_add(show_fullscreen_gif, "congratulations1.gif");
-                // DO NOT auto-close here; wait for next token to close GIF
+                mpv_play_gif("congratulations1.gif");
             } else if (strcmp(token, "G1") == 0) {
-                g_idle_add(show_fullscreen_gif, "gameover1.gif");
+                mpv_play_gif("gameover1.gif");
                 strcpy(current_token, "--");
                 strcpy(previous_token, "--");
                 strcpy(preceding_token, "--");
-                // DO NOT auto-close here
             } else {
-                // If a normal token arrives, we want to close GIF (if any) and update UI.
-                // Schedule the gif window destruction on main thread (safe)
-                g_idle_add(destroy_gif_window, NULL);
-
+                mpv_stop_gif();
                 shift_tokens(token);
                 g_idle_add(update_ui_from_serial, NULL);
             }
@@ -347,19 +291,18 @@ void cleanup_images(void) {
     remove("current.png");
     remove("previous.png");
     remove("preceding.png");
-    // ensure gif window destroyed on main thread
-    if (gif_window) {
-        // If we're already on main thread, destroy directly; else schedule
-        if (g_main_context_is_owner(g_main_context_default())) {
-            destroy_gif_window(NULL);
-        } else {
-            g_idle_add(destroy_gif_window, NULL);
-        }
+    mpv_stop_gif();
+    if (mpv_pid > 0) {
+        kill(mpv_pid, SIGTERM);
+        mpv_pid = -1;
     }
 }
 
 int main(int argc, char *argv[]) {
     gtk_init(&argc, &argv);
+
+    // Start mpv in idle mode
+    mpv_start_preloaded();
 
     GtkBuilder *builder = gtk_builder_new_from_file("interface_paned.glade");
     GtkWidget *window = GTK_WIDGET(gtk_builder_get_object(builder, "main"));
