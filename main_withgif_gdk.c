@@ -48,14 +48,10 @@ gboolean safe_destroy_window(gpointer data) {
 void refocus_main_window(void) {
     GtkWidget *window = gtk_widget_get_toplevel(top_label);
     if (window && GTK_IS_WINDOW(window)) {
-        GdkWindow *gdk_win = gtk_widget_get_window(window);
-        if (gdk_win) {
-            GdkWindowState state = gdk_window_get_state(gdk_win);
-            if (!(state & GDK_WINDOW_STATE_FULLSCREEN)) {
-                gtk_window_fullscreen(GTK_WINDOW(window));
-                gtk_window_present(GTK_WINDOW(window));
-            }
-        }
+        gtk_window_unfullscreen(GTK_WINDOW(window));
+        gtk_window_move(GTK_WINDOW(window), 0, 0);
+        gtk_window_fullscreen(GTK_WINDOW(window));
+        gtk_window_present(GTK_WINDOW(window));
     }
 }
 
@@ -80,18 +76,22 @@ static gboolean gif_player_advance(gpointer data) {
 }
 
 static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
-    if (!gif_player || !gif_player->iter) return FALSE;
+    if (!gif_player || !gif_player->iter)
+        return FALSE;
 
     GdkPixbuf *frame = gdk_pixbuf_animation_iter_get_pixbuf(gif_player->iter);
-    if (!frame) return FALSE;
+    if (!frame || !GDK_IS_PIXBUF(frame))
+        return FALSE;
 
     int da_width = gtk_widget_get_allocated_width(widget);
     int da_height = gtk_widget_get_allocated_height(widget);
-    if (da_width < 1 || da_height < 1) return FALSE;
+    if (da_width < 1 || da_height < 1)
+        return FALSE;
 
     int orig_width = gdk_pixbuf_get_width(frame);
     int orig_height = gdk_pixbuf_get_height(frame);
-    if (orig_height == 0) return FALSE;
+    if (orig_height <= 0 || orig_width <= 0)
+        return FALSE;
 
     // Fit to height, maintain aspect ratio
     double scale = (double)da_height / orig_height;
@@ -114,10 +114,22 @@ static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
 
 static void gif_player_cleanup() {
     if (gif_player) {
-        if (gif_player->timeout_id) g_source_remove(gif_player->timeout_id);
-        if (gif_player->animation) g_object_unref(gif_player->animation);
-        if (gif_player->iter) g_object_unref(gif_player->iter);
-        if (gif_player->timer) g_timer_destroy(gif_player->timer);
+        if (gif_player->timeout_id) {
+            g_source_remove(gif_player->timeout_id);
+            gif_player->timeout_id = 0;
+        }
+        if (gif_player->animation) {
+            g_object_unref(gif_player->animation);
+            gif_player->animation = NULL;
+        }
+        if (gif_player->iter) {
+            g_object_unref(gif_player->iter);
+            gif_player->iter = NULL;
+        }
+        if (gif_player->timer) {
+            g_timer_destroy(gif_player->timer);
+            gif_player->timer = NULL;
+        }
         g_free(gif_player);
         gif_player = NULL;
     }
