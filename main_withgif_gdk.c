@@ -174,14 +174,14 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     // Set window type hint to ensure it stays on top
     gtk_window_set_type_hint(GTK_WINDOW(gif_window), GDK_WINDOW_TYPE_HINT_SPLASHSCREEN);
     
-    // Force fullscreen on primary monitor
+    // Get screen dimensions using older GDK methods
     GdkScreen *screen = gdk_screen_get_default();
-    GdkMonitor *primary = gdk_display_get_primary_monitor(gdk_screen_get_display(screen));
-    GdkRectangle geometry;
-    gdk_monitor_get_geometry(primary, &geometry);
+    gint screen_width = gdk_screen_get_width(screen);
+    gint screen_height = gdk_screen_get_height(screen);
     
-    gtk_window_move(GTK_WINDOW(gif_window), geometry.x, geometry.y);
-    gtk_window_set_default_size(GTK_WINDOW(gif_window), geometry.width, geometry.height);
+    // Set window position and size
+    gtk_window_move(GTK_WINDOW(gif_window), 0, 0);
+    gtk_window_set_default_size(GTK_WINDOW(gif_window), screen_width, screen_height);
     gtk_window_fullscreen(GTK_WINDOW(gif_window));
     gtk_window_set_keep_above(GTK_WINDOW(gif_window), TRUE);
 
@@ -537,13 +537,14 @@ int main(int argc, char *argv[]) {
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window), TRUE);
     gtk_window_set_skip_pager_hint(GTK_WINDOW(window), TRUE);
     
-    // Force window position on primary monitor
+    // Get screen dimensions using older GDK methods
     GdkScreen *screen = gdk_screen_get_default();
-    GdkMonitor *primary = gdk_display_get_primary_monitor(gdk_screen_get_display(screen));
-    GdkRectangle geometry;
-    gdk_monitor_get_geometry(primary, &geometry);
+    gint screen_width = gdk_screen_get_width(screen);
+    gint screen_height = gdk_screen_get_height(screen);
     
-    gtk_window_move(GTK_WINDOW(window), geometry.x, geometry.y);
+    // Set window position and size
+    gtk_window_move(GTK_WINDOW(window), 0, 0);
+    gtk_window_set_default_size(GTK_WINDOW(window), screen_width, screen_height);
     gtk_window_fullscreen(GTK_WINDOW(window));
     
     // Prevent window from being moved
