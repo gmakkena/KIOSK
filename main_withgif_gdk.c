@@ -467,7 +467,9 @@ int main(int argc, char *argv[]) {
     g_idle_add(set_paned_ratios, NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(cleanup_images), NULL);
+
     gtk_widget_show_all(window);
+    refocus_main_window();
 
     strcpy(current_token, "--");
     strcpy(previous_token, "--");
