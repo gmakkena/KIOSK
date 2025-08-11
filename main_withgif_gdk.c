@@ -1,4 +1,3 @@
-
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -8,11 +7,7 @@
 #include <unistd.h>
 #include <termios.h>
 #include <signal.h>
-// Proper handler for map-event to ensure window is at (0,0) and fullscreen when mapped
-static gboolean on_main_window_map(GtkWidget *widget, GdkEvent *event, gpointer user_data) {
-    refocus_main_window();
-    return FALSE; // propagate event
-}
+
 // Widgets
 GtkWidget *top_label;
 GtkWidget *current_image, *previous_image, *preceding_image;
@@ -474,7 +469,7 @@ int main(int argc, char *argv[]) {
     g_signal_connect(window, "destroy", G_CALLBACK(cleanup_images), NULL);
 
     gtk_widget_show_all(window);
-    g_signal_connect(window, "map-event", G_CALLBACK(on_main_window_map), NULL);
+    refocus_main_window();
 
     strcpy(current_token, "--");
     strcpy(previous_token, "--");
