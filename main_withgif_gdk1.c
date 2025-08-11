@@ -1,4 +1,5 @@
 // Modified: keeps GIF until next token; safe destroy on main thread; Liberation Sans fonts used.
+// Full file with scaled fullscreen GIF and safe destroy.
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
@@ -68,10 +69,9 @@ gboolean destroy_gif_window(gpointer data) {
 }
 
 // Keypress handler for GIF window (runs on main thread)
+// schedule destroy on main thread and refresh UI afterwards
 gboolean on_gif_keypress(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
-    // Close gif safely
-    destroy_gif_window(NULL);
-    // Request a UI refresh of tokens
+    g_idle_add(destroy_gif_window, NULL);
     g_idle_add(update_ui_from_serial, NULL);
     return TRUE;
 }
@@ -82,15 +82,14 @@ gboolean schedule_update_ui_from_serial(gpointer data) {
     return G_SOURCE_REMOVE;
 }
 
-// ---------- Show Fullscreen GIF ----------
+// ---------- Show Fullscreen GIF (scaled to screen) ----------
 gboolean show_fullscreen_gif(gpointer filename_ptr) {
     const char *filename = (const char *)filename_ptr;
 
-    // Schedule close if an older gif_window exists (safe via main thread)
+    // If a gif is already showing, destroy it first (on main thread)
     if (gif_window) {
-        // schedule destruction of previous GIF first
         g_idle_add(destroy_gif_window, NULL);
-        // continue to create new one below
+        // allow the previous destroy to run; continue creating a fresh one below
     }
 
     // Create new fullscreen window
@@ -106,7 +105,7 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     gtk_style_context_add_provider(gtk_widget_get_style_context(gif_window),
         GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
-    // Create and load GIF into gif_image
+    // Create image widget and load animation
     gif_image = gtk_image_new();
     GError *error = NULL;
     GdkPixbufAnimation *anim = gdk_pixbuf_animation_new_from_file(filename, &error);
@@ -114,30 +113,32 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     if (!anim) {
         g_printerr("GIF Error: %s\n", error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        // clean up gif_image if created
-        if (gif_image) {
-            gtk_widget_destroy(gif_image);
-            gif_image = NULL;
-        }
-        if (gif_window) {
-            gtk_widget_destroy(gif_window);
-            gif_window = NULL;
-        }
+        if (gif_image) { gtk_widget_destroy(gif_image); gif_image = NULL; }
+        if (gif_window) { gtk_widget_destroy(gif_window); gif_window = NULL; }
         return FALSE;
     }
 
     gtk_image_set_from_animation(GTK_IMAGE(gif_image), anim);
     g_object_unref(anim);
 
-    // Close on any key press (use our safe handler)
-    g_signal_connect(gif_window, "key-press-event",
-        G_CALLBACK(on_gif_keypress), NULL);
+    // Make the image expand to fill the window. This keeps aspect ratio in many GTK backends;
+    // if you want hard stretch (ignore aspect) you'll need a drawing-area-based approach.
+    gtk_widget_set_hexpand(gif_image, TRUE);
+    gtk_widget_set_vexpand(gif_image, TRUE);
+    gtk_widget_set_halign(gif_image, GTK_ALIGN_FILL);
+    gtk_widget_set_valign(gif_image, GTK_ALIGN_FILL);
 
-    gtk_container_add(GTK_CONTAINER(gif_window), gif_image);
+    // Put the image in a GtkViewport inside a GtkScrolledWindow-less container so it will receive allocations
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(box), gif_image, TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(gif_window), box);
+
+    // Connect keypress to safe handler
+    g_signal_connect(gif_window, "key-press-event", G_CALLBACK(on_gif_keypress), NULL);
+
     gtk_widget_show_all(gif_window);
 
-    // NOTE: No auto-close here. GIF will remain until next token or keypress.
-
+    // Note: no auto-close; GIF remains until next token arrives (serial thread will call destroy)
     return FALSE;
 }
 
