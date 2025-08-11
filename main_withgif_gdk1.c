@@ -90,18 +90,22 @@ void mpv_set_ontop(gboolean enable) {
 }
 
 void mpv_play_gif(const char *filename) {
-    // Bring mpv window on top when playing GIF
+    // Load the gif file and show mpv window on top
     mpv_set_ontop(TRUE);
+
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
              "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}",
              filename);
     mpv_send_command(cmd);
+
+    // Unpause playback to ensure GIF plays
+    mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");
 }
 
 void mpv_stop_gif() {
-    // Load black image and disable ontop to hide mpv window behind GTK
-    mpv_play_gif("black.png");
+    // Pause playback and hide mpv window by removing ontop
+    mpv_send_command("{\"command\": [\"set_property\", \"pause\", true]}");
     mpv_set_ontop(FALSE);
 }
 
