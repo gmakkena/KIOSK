@@ -1,8 +1,4 @@
-// Proper handler for map-event to ensure window is at (0,0) and fullscreen when mapped
-static gboolean on_main_window_map(GtkWidget *widget, GdkEvent *event, gpointer user_data) {
-    refocus_main_window();
-    return FALSE; // propagate event
-}
+
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -12,7 +8,11 @@ static gboolean on_main_window_map(GtkWidget *widget, GdkEvent *event, gpointer 
 #include <unistd.h>
 #include <termios.h>
 #include <signal.h>
-
+// Proper handler for map-event to ensure window is at (0,0) and fullscreen when mapped
+static gboolean on_main_window_map(GtkWidget *widget, GdkEvent *event, gpointer user_data) {
+    refocus_main_window();
+    return FALSE; // propagate event
+}
 // Widgets
 GtkWidget *top_label;
 GtkWidget *current_image, *previous_image, *preceding_image;
