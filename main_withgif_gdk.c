@@ -104,9 +104,9 @@ static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
     return FALSE;
 }
 
-static void gif_player_cleanup() {
+static gboolean delayed_cleanup(gpointer user_data) {
     if (gif_player) {
-        g_print("Cleaning up gif_player resources\n");
+        g_print("Starting delayed cleanup of gif_player resources\n");
         
         if (gif_player->timeout_id) {
             g_source_remove(gif_player->timeout_id);
@@ -128,18 +128,27 @@ static void gif_player_cleanup() {
             gif_player->timer = NULL;
         }
         
-        if (gif_player->drawing_area) {
-            gif_player->drawing_area = NULL;  // Will be destroyed with window
-        }
+        // Don't free drawing_area as it's owned by the window
+        gif_player->drawing_area = NULL;
         
-        g_free(gif_player);
-        gif_player = NULL;
+        GifPlayer *temp = gif_player;
+        gif_player = NULL;  // Clear global first
+        g_free(temp);       // Then free the memory
     }
     
     if (gif_window) {
+        gtk_widget_hide(gif_window);  // Hide first to prevent visual artifacts
         gtk_widget_destroy(gif_window);
         gif_window = NULL;
     }
+    
+    return G_SOURCE_REMOVE;
+}
+
+static void gif_player_cleanup() {
+    // Schedule the cleanup to happen in the main thread
+    g_idle_add(delayed_cleanup, NULL);
+}
 }
 
 // ---------- Show Fullscreen GIF (now stretched to fit) ----------
@@ -205,21 +214,64 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
         gif_window = NULL;
         return FALSE;
     }
+    // Initialize animation iter
+    GError *iter_error = NULL;
     gif_player->iter = gdk_pixbuf_animation_get_iter(gif_player->animation, NULL);
-    gif_player->timer = g_timer_new();
+    if (!gif_player->iter) {
+        g_printerr("Failed to create animation iterator\n");
+        g_object_unref(gif_player->animation);
+        g_free(gif_player);
+        gif_player = NULL;
+        gtk_widget_destroy(gif_window);
+        gif_window = NULL;
+        return FALSE;
+    }
 
-    // Drawing area to render gif
+    // Create timer
+    gif_player->timer = g_timer_new();
+    if (!gif_player->timer) {
+        g_printerr("Failed to create timer\n");
+        g_object_unref(gif_player->iter);
+        g_object_unref(gif_player->animation);
+        g_free(gif_player);
+        gif_player = NULL;
+        gtk_widget_destroy(gif_window);
+        gif_window = NULL;
+        return FALSE;
+    }
+
+    // Create drawing area
     gif_player->drawing_area = gtk_drawing_area_new();
     gtk_container_add(GTK_CONTAINER(gif_window), gif_player->drawing_area);
 
-    g_signal_connect(gif_player->drawing_area, "draw", G_CALLBACK(gif_player_draw), NULL);
+    // Connect signals
+    gulong draw_handler = g_signal_connect(gif_player->drawing_area, "draw", 
+                                         G_CALLBACK(gif_player_draw), NULL);
+    if (draw_handler == 0) {
+        g_printerr("Failed to connect draw signal\n");
+        g_timer_destroy(gif_player->timer);
+        g_object_unref(gif_player->iter);
+        g_object_unref(gif_player->animation);
+        g_free(gif_player);
+        gif_player = NULL;
+        gtk_widget_destroy(gif_window);
+        gif_window = NULL;
+        return FALSE;
+    }
+
     g_signal_connect(gif_window, "destroy", G_CALLBACK(gif_player_cleanup), NULL);
     g_signal_connect(gif_window, "key-press-event", G_CALLBACK(gtk_widget_destroy), NULL);
 
+    // Show window before starting animation
     gtk_widget_show_all(gif_window);
 
     // Start animation timer
     gif_player->timeout_id = g_timeout_add(10, gif_player_advance, NULL);
+    if (gif_player->timeout_id == 0) {
+        g_printerr("Failed to create animation timer\n");
+        gif_player_cleanup();
+        return FALSE;
+    }
 
     return FALSE;
 }
