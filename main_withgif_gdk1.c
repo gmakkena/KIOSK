@@ -71,7 +71,8 @@ void mpv_start_preloaded() {
                "--no-border",       // Remove window decorations
                "--x11-name=mpv_kiosk", // Set specific window name
                "--ontop=no",        // Start not on top
-               "--window-minimized=yes", // Start minimized
+               "--background=0.0",  // Make background transparent
+               "--alpha=no",        // Disable alpha channel
                "black.png", // start with a dummy blank image
                (char *)NULL);
         perror("mpv launch failed");
@@ -94,32 +95,30 @@ void mpv_set_ontop(gboolean enable) {
 }
 
 void mpv_play_gif(const char *filename) {
-    // Set window position and size to full screen
-    char pos_cmd[256];
-    snprintf(pos_cmd, sizeof(pos_cmd),
-             "{\"command\": [\"set_property\", \"geometry\", \"100%%x100%%+0+0\"]}");
-    mpv_send_command(pos_cmd);
-
-    // Show the window and bring it to front
-    mpv_send_command("{\"command\": [\"set_property\", \"window-minimized\", false]}");
-    mpv_set_ontop(TRUE);
-
+    // First load the file
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
              "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}",
              filename);
     mpv_send_command(cmd);
 
-    // Unpause playback to ensure GIF plays
+    // Make sure we're in fullscreen and properly positioned
+    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
+    
+    // Ensure window is visible and on top
+    mpv_set_ontop(TRUE);
+    
+    // Ensure it's playing
     mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");
 }
 
 void mpv_stop_gif() {
-    // Pause playback and hide mpv window
-    mpv_send_command("{\"command\": [\"set_property\", \"pause\", true]}");
+    // Load a blank/transparent frame to effectively hide the window
+    mpv_send_command("{\"command\": [\"loadfile\", \"black.png\", \"replace\"]}");
+    
+    // Remove from top and pause
     mpv_set_ontop(FALSE);
-    // Minimize the window to hide it
-    mpv_send_command("{\"command\": [\"set_property\", \"window-minimized\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"pause\", true]}");
 }
 
 // ---------- Generate Token Image ----------
