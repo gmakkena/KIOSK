@@ -156,9 +156,9 @@ void mpv_play_gif(const char *filename) {
              filename);
     mpv_send_command(cmd);
     
-    // Ensure it's playing and visible
+    // Start playback (MPV uses pause=false to play)
     usleep(100000);  // Wait for file to load
-    mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");  // Start playing
     mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
     debug_log("GIF playback started");
 }
