@@ -149,7 +149,7 @@ static void gif_player_cleanup() {
     // Schedule the cleanup to happen in the main thread
     g_idle_add(delayed_cleanup, NULL);
 }
-}
+
 
 // ---------- Show Fullscreen GIF (now stretched to fit) ----------
 gboolean show_fullscreen_gif(gpointer filename_ptr) {
