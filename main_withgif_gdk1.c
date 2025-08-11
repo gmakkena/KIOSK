@@ -68,6 +68,8 @@ void mpv_start_preloaded() {
                "--input-ipc-server=/tmp/mpv_socket",
                "--loop=inf",
                "--force-window=yes",
+               "--no-border",       // Remove window decorations
+               "--x11-name=mpv_kiosk", // Set specific window name
                "black.png", // start with a dummy blank image
                (char *)NULL);
         perror("mpv launch failed");
@@ -93,6 +95,12 @@ void mpv_play_gif(const char *filename) {
     // Load the gif file and show mpv window on top
     mpv_set_ontop(TRUE);
 
+    // Set window position and size to full screen
+    char pos_cmd[256];
+    snprintf(pos_cmd, sizeof(pos_cmd),
+             "{\"command\": [\"set_property\", \"geometry\", \"100%%x100%%+0+0\"]}");
+    mpv_send_command(pos_cmd);
+
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
              "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}",
@@ -106,6 +114,7 @@ void mpv_play_gif(const char *filename) {
 void mpv_stop_gif() {
     // Pause playback and hide mpv window by removing ontop
     mpv_send_command("{\"command\": [\"set_property\", \"pause\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"geometry\", \"100%x100%+0+0\"]}");
     mpv_set_ontop(FALSE);
 }
 
