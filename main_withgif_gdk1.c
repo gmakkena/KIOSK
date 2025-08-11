@@ -96,33 +96,47 @@ int mpv_send_command(const char *cmd) {
 }
 
 void mpv_start_preloaded() {
+    debug_log("Starting MPV preload");
+    
+    // Check if MPV exists
+    if (access("/usr/bin/mpv", X_OK) != 0) {
+        debug_log("Error: MPV not found at /usr/bin/mpv");
+        return;
+    }
+
+    // Create a blank black.png if it doesn't exist
+    if (access("black.png", F_OK) != 0) {
+        system("convert -size 1920x1080 xc:black black.png");
+        debug_log("Created black.png");
+    }
+
     // Remove any stale socket
     unlink(mpv_socket_path);
 
     mpv_pid = fork();
     if (mpv_pid == 0) {
-        execlp("mpv", "mpv",
-               "--idle=yes",
-               "--fs",
-               "--no-terminal",
-               "--really-quiet",
-               "--input-ipc-server=/tmp/mpv_socket",
-               "--loop=inf",
-               "--force-window=yes",
-               "--no-border",       // Remove window decorations
-               "--x11-name=mpv_kiosk", // Set specific window name
-               "--ontop=no",        // Start not on top
-               "--no-keepaspect",   // Don't maintain aspect ratio
-               "--no-keepaspect-window", // Allow window to stretch
-               "--screen=0",        // Use primary screen
-               "--window-scale=1.0", // Full size
-               "--no-focus-on-open", // Don't focus when starting
-               "--pause=yes",       // Start paused
-               "--video-sync=display-resample", // Smoother playback
-               "--priority=high",   // High priority playback
-               "black.png", // start with a dummy blank image
-               (char *)NULL);
-        perror("mpv launch failed");
+        // Child process
+        debug_log("Child process starting");
+        
+        // Redirect stdout and stderr to /dev/null
+        freopen("/dev/null", "w", stdout);
+        freopen("/dev/null", "w", stderr);
+        
+        execl("/usr/bin/mpv", "mpv",
+              "--idle=yes",
+              "--no-terminal",
+              "--really-quiet",
+              "--input-ipc-server=/tmp/mpv_socket",
+              "--force-window=yes",
+              "--fs",
+              "--no-border",
+              "--keep-open=yes",
+              "--pause=yes",
+              "black.png",
+              NULL);
+              
+        debug_log("MPV launch failed");
+        perror("execl failed");
         _exit(1);
     }
 
@@ -383,14 +397,23 @@ int main(int argc, char *argv[]) {
     // Create /tmp directory if it doesn't exist
     mkdir("/tmp", 0777);
     
-    // Remove any existing socket
-    unlink(mpv_socket_path);
-    
     // Start mpv in idle mode
     mpv_start_preloaded();
     
-    // Wait for MPV to initialize
-    usleep(2000000);  // Wait 2 seconds
+    // Wait for MPV to initialize and check if it's running
+    int attempts = 0;
+    while (attempts < 20) {
+        if (access(mpv_socket_path, F_OK) == 0) {
+            debug_log("MPV initialized successfully");
+            break;
+        }
+        usleep(100000);  // Wait 100ms
+        attempts++;
+    }
+    
+    if (attempts >= 20) {
+        debug_log("Error: Failed to initialize MPV");
+    }
 
     GtkBuilder *builder = gtk_builder_new_from_file("interface_paned.glade");
     GtkWidget *window = GTK_WIDGET(gtk_builder_get_object(builder, "main"));
