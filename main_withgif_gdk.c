@@ -60,46 +60,82 @@ static gboolean gif_player_advance(gpointer data) {
 }
 
 static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
-    if (!gif_player || !gif_player->iter) return FALSE;
+    if (!gif_player || !gif_player->iter || !gif_player->animation) {
+        g_print("Draw callback: Invalid gif_player state\n");
+        return FALSE;
+    }
 
+    // Get the current frame
     GdkPixbuf *frame = gdk_pixbuf_animation_iter_get_pixbuf(gif_player->iter);
-    if (!frame) return FALSE;
+    if (!frame || !GDK_IS_PIXBUF(frame)) {
+        g_print("Draw callback: Invalid frame pixbuf\n");
+        return FALSE;
+    }
 
     int da_width = gtk_widget_get_allocated_width(widget);
     int da_height = gtk_widget_get_allocated_height(widget);
 
-    if (da_width < 1 || da_height < 1) return FALSE;
+    if (da_width < 1 || da_height < 1) {
+        g_print("Draw callback: Invalid drawing area dimensions\n");
+        return FALSE;
+    }
 
-    // Get the original dimensions and format
-    int orig_width = gdk_pixbuf_get_width(frame);
-    int orig_height = gdk_pixbuf_get_height(frame);
+    // Create a new scaled pixbuf
+    GError *error = NULL;
+    GdkPixbuf *scaled = gdk_pixbuf_scale_simple(frame, 
+                                               da_width, 
+                                               da_height, 
+                                               GDK_INTERP_BILINEAR);
     
-    // Calculate scaling factors
-    double scale_x = (double)da_width / orig_width;
-    double scale_y = (double)da_height / orig_height;
-    
-    // Scale the cairo context instead of the pixbuf
-    cairo_scale(cr, scale_x, scale_y);
-    
-    // Draw the original frame directly
-    gdk_cairo_set_source_pixbuf(cr, frame, 0, 0);
+    if (!scaled || !GDK_IS_PIXBUF(scaled)) {
+        g_print("Draw callback: Failed to create scaled pixbuf\n");
+        return FALSE;
+    }
+
+    // Set background to black
+    cairo_set_source_rgb(cr, 0, 0, 0);
     cairo_paint(cr);
-    
-    // Reset the scale
-    cairo_scale(cr, 1.0/scale_x, 1.0/scale_y);
-    
+
+    // Draw the scaled pixbuf
+    gdk_cairo_set_source_pixbuf(cr, scaled, 0, 0);
+    cairo_paint(cr);
+
+    g_object_unref(scaled);
     return FALSE;
 }
 
 static void gif_player_cleanup() {
     if (gif_player) {
-        if (gif_player->timeout_id) g_source_remove(gif_player->timeout_id);
-        if (gif_player->animation) g_object_unref(gif_player->animation);
-        if (gif_player->iter) g_object_unref(gif_player->iter);
-        if (gif_player->timer) g_timer_destroy(gif_player->timer);
+        g_print("Cleaning up gif_player resources\n");
+        
+        if (gif_player->timeout_id) {
+            g_source_remove(gif_player->timeout_id);
+            gif_player->timeout_id = 0;
+        }
+        
+        if (gif_player->iter) {
+            g_object_unref(gif_player->iter);
+            gif_player->iter = NULL;
+        }
+        
+        if (gif_player->animation) {
+            g_object_unref(gif_player->animation);
+            gif_player->animation = NULL;
+        }
+        
+        if (gif_player->timer) {
+            g_timer_destroy(gif_player->timer);
+            gif_player->timer = NULL;
+        }
+        
+        if (gif_player->drawing_area) {
+            gif_player->drawing_area = NULL;  // Will be destroyed with window
+        }
+        
         g_free(gif_player);
         gif_player = NULL;
     }
+    
     if (gif_window) {
         gtk_widget_destroy(gif_window);
         gif_window = NULL;
