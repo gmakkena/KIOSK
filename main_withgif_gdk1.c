@@ -131,7 +131,12 @@ void mpv_start_preloaded() {
               "--fs",
               "--no-border",
               "--keep-open=yes",
-              "--pause=yes",
+              "--ontop",
+              "--no-terminal",
+              "--no-stop-screensaver",
+              "--on-all-workspaces",
+              "--no-keepaspect-window",
+              "--geometry=0:0",
               "black.png",
               NULL);
               
@@ -158,22 +163,29 @@ void mpv_set_ontop(gboolean enable) {
 void mpv_play_gif(const char *filename) {
     debug_log("Starting to play GIF");
     
-    // First ensure window properties
+    // First ensure the window is ready
     mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"on-all-workspaces\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"keep-open\", true]}");
     mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
     usleep(100000);  // Small delay
+
+    // Force window to front
+    mpv_send_command("{\"command\": [\"set_property\", \"focus\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"border\", false]}");
     
-    // Load the file
+    // Load and play the file
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
              "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}",
              filename);
     mpv_send_command(cmd);
     
-    // Start playback (MPV uses pause=false to play)
+    // Ensure playback and visibility
     usleep(100000);  // Wait for file to load
-    mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");  // Start playing
+    mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");
     mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"focus\", true]}");
     debug_log("GIF playback started");
 }
 
