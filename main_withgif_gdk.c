@@ -145,9 +145,16 @@ static void gif_player_cleanup() {
 // ---------- Show Fullscreen GIF (now stretched to fit) ----------
 gboolean show_fullscreen_gif(gpointer filename_ptr) {
     const char *filename = (const char *)filename_ptr;
+    g_print("Attempting to show GIF: %s\n", filename);
 
     // Cleanup existing GIF window/player if open
     gif_player_cleanup();
+
+    // Verify file exists first
+    if (!g_file_test(filename, G_FILE_TEST_EXISTS)) {
+        g_printerr("GIF file does not exist: %s\n", filename);
+        return FALSE;
+    }
 
     // Create new fullscreen window
     gif_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -161,16 +168,37 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
         "window { background-color: black; }", -1, NULL);
     gtk_style_context_add_provider(gtk_widget_get_style_context(gif_window),
         GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(css);
 
     // Allocate gif player struct
     gif_player = g_new0(GifPlayer, 1);
+    if (!gif_player) {
+        g_printerr("Failed to allocate GifPlayer structure\n");
+        gtk_widget_destroy(gif_window);
+        gif_window = NULL;
+        return FALSE;
+    }
 
-    // Load animation
+    // Load animation with detailed error checking
     GError *error = NULL;
+    g_print("Loading animation from file: %s\n", filename);
     gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
+    
     if (error) {
-        g_printerr("GIF Error: %s\n", error->message);
+        g_printerr("GIF Error loading %s: %s\n", filename, error->message);
         g_error_free(error);
+        g_free(gif_player);
+        gif_player = NULL;
+        gtk_widget_destroy(gif_window);
+        gif_window = NULL;
+        return FALSE;
+    }
+    
+    if (!gif_player->animation || !GDK_IS_PIXBUF_ANIMATION(gif_player->animation)) {
+        g_printerr("Invalid animation object created for %s\n", filename);
+        if (gif_player->animation) {
+            g_object_unref(gif_player->animation);
+        }
         g_free(gif_player);
         gif_player = NULL;
         gtk_widget_destroy(gif_window);
@@ -370,9 +398,16 @@ void *serial_reader_thread(void *arg) {
             sscanf(buf, "%31s", token);
 
             if (strcmp(token, "C1") == 0) {
-                g_idle_add(show_fullscreen_gif, "congratulations1.gif");
+                g_print("Received C1 token, showing congratulations GIF\n");
+                char *gif_path = g_build_filename(g_get_current_dir(), "congratulations1.gif", NULL);
+                g_print("Full path to congratulations GIF: %s\n", gif_path);
+                g_idle_add(show_fullscreen_gif, gif_path);
+                // Don't free gif_path as it's used by the idle callback
             } else if (strcmp(token, "G1") == 0) {
-                g_idle_add(show_fullscreen_gif, "gameover1.gif");
+                g_print("Received G1 token, showing gameover GIF\n");
+                char *gif_path = g_build_filename(g_get_current_dir(), "gameover1.gif", NULL);
+                g_print("Full path to gameover GIF: %s\n", gif_path);
+                g_idle_add(show_fullscreen_gif, gif_path);
                 // Reset tokens safely
                 strncpy(current_token, "--", sizeof(current_token));
                 strncpy(previous_token, "--", sizeof(previous_token));
