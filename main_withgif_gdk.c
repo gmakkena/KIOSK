@@ -48,9 +48,14 @@ gboolean safe_destroy_window(gpointer data) {
 void refocus_main_window(void) {
     GtkWidget *window = gtk_widget_get_toplevel(top_label);
     if (window && GTK_IS_WINDOW(window)) {
-        gtk_window_unfullscreen(GTK_WINDOW(window));
-        gtk_window_fullscreen(GTK_WINDOW(window));
-        gtk_window_present(GTK_WINDOW(window));
+        GdkWindow *gdk_win = gtk_widget_get_window(window);
+        if (gdk_win) {
+            GdkWindowState state = gdk_window_get_state(gdk_win);
+            if (!(state & GDK_WINDOW_STATE_FULLSCREEN)) {
+                gtk_window_fullscreen(GTK_WINDOW(window));
+                gtk_window_present(GTK_WINDOW(window));
+            }
+        }
     }
 }
 
@@ -341,6 +346,7 @@ gboolean update_ui_from_serial(gpointer user_data) {
     pthread_t image_thread;
     pthread_create(&image_thread, NULL, image_generator_thread, NULL);
     pthread_detach(image_thread);
+    refocus_main_window();
     return FALSE;
 }
 
