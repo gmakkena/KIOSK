@@ -16,7 +16,16 @@ GtkWidget *ticker_fixed, *ticker_label;
 
 // GIF Playback
 GtkWidget *gif_window = NULL;
-GtkWidget *gif_image = NULL;
+
+// For fullscreen GIF scaling:
+typedef struct {
+    GdkPixbufAnimation *animation;
+    GdkPixbufAnimationIter *iter;
+    guint timeout_id;
+    GtkWidget *drawing_area;
+    GTimer *timer;
+} GifPlayer;
+static GifPlayer *gif_player = NULL;
 
 // Ticker
 int ticker_x = 0, ticker_width = 0, ticker_area_width = 0;
@@ -35,15 +44,63 @@ gboolean safe_destroy_window(gpointer data) {
     return G_SOURCE_REMOVE;
 }
 
-// ---------- Show Fullscreen GIF ----------
-gboolean show_fullscreen_gif(gpointer filename_ptr) {
-    const char *filename = (const char *)filename_ptr;
+// --- GIF Fullscreen Scaling Helper Functions ---
+static gboolean gif_player_advance(gpointer data) {
+    if (!gif_player || !gif_player->iter) return G_SOURCE_REMOVE;
 
-    // Close existing GIF window if open
+    gdouble elapsed = g_timer_elapsed(gif_player->timer, NULL) * 1000.0; // ms
+    int delay = gdk_pixbuf_animation_iter_get_delay_time(gif_player->iter);
+
+    if (elapsed >= delay) {
+        gdk_pixbuf_animation_iter_advance(gif_player->iter, NULL);
+        gtk_widget_queue_draw(gif_player->drawing_area);
+        g_timer_start(gif_player->timer);
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
+    if (!gif_player || !gif_player->iter) return FALSE;
+
+    GdkPixbuf *frame = gdk_pixbuf_animation_iter_get_pixbuf(gif_player->iter);
+    if (!frame) return FALSE;
+
+    int da_width = gtk_widget_get_allocated_width(widget);
+    int da_height = gtk_widget_get_allocated_height(widget);
+
+    if (da_width < 1 || da_height < 1) return FALSE;
+
+    GdkPixbuf *scaled = gdk_pixbuf_scale_simple(
+        frame, da_width, da_height, GDK_INTERP_BILINEAR);
+
+    gdk_cairo_set_source_pixbuf(cr, scaled, 0, 0);
+    cairo_paint(cr);
+
+    g_object_unref(scaled);
+    return FALSE;
+}
+
+static void gif_player_cleanup() {
+    if (gif_player) {
+        if (gif_player->timeout_id) g_source_remove(gif_player->timeout_id);
+        if (gif_player->animation) g_object_unref(gif_player->animation);
+        if (gif_player->iter) g_object_unref(gif_player->iter);
+        if (gif_player->timer) g_timer_destroy(gif_player->timer);
+        g_free(gif_player);
+        gif_player = NULL;
+    }
     if (gif_window) {
         gtk_widget_destroy(gif_window);
         gif_window = NULL;
     }
+}
+
+// ---------- Show Fullscreen GIF (now stretched to fit) ----------
+gboolean show_fullscreen_gif(gpointer filename_ptr) {
+    const char *filename = (const char *)filename_ptr;
+
+    // Cleanup existing GIF window/player if open
+    gif_player_cleanup();
 
     // Create new fullscreen window
     gif_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -58,27 +115,36 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     gtk_style_context_add_provider(gtk_widget_get_style_context(gif_window),
         GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
-    // Create and load GIF
-    gif_image = gtk_image_new();
+    // Allocate gif player struct
+    gif_player = g_new0(GifPlayer, 1);
+
+    // Load animation
     GError *error = NULL;
-    GdkPixbufAnimation *anim = gdk_pixbuf_animation_new_from_file(filename, &error);
-    
+    gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
     if (error) {
         g_printerr("GIF Error: %s\n", error->message);
         g_error_free(error);
+        g_free(gif_player);
+        gif_player = NULL;
+        gtk_widget_destroy(gif_window);
+        gif_window = NULL;
         return FALSE;
     }
+    gif_player->iter = gdk_pixbuf_animation_get_iter(gif_player->animation, NULL);
+    gif_player->timer = g_timer_new();
 
-    gtk_image_set_from_animation(GTK_IMAGE(gif_image), anim);
-    g_object_unref(anim);
+    // Drawing area to render gif
+    gif_player->drawing_area = gtk_drawing_area_new();
+    gtk_container_add(GTK_CONTAINER(gif_window), gif_player->drawing_area);
 
-    // Close on any key press
-    g_signal_connect(gif_window, "key-press-event", 
-        G_CALLBACK(gtk_widget_destroy), NULL);
+    g_signal_connect(gif_player->drawing_area, "draw", G_CALLBACK(gif_player_draw), NULL);
+    g_signal_connect(gif_window, "destroy", G_CALLBACK(gif_player_cleanup), NULL);
+    g_signal_connect(gif_window, "key-press-event", G_CALLBACK(gtk_widget_destroy), NULL);
 
-    // Add to window and show
-    gtk_container_add(GTK_CONTAINER(gif_window), gif_image);
     gtk_widget_show_all(gif_window);
+
+    // Start animation timer
+    gif_player->timeout_id = g_timeout_add(10, gif_player_advance, NULL);
 
     return FALSE;
 }
@@ -260,19 +326,18 @@ void *serial_reader_thread(void *arg) {
                 g_idle_add(show_fullscreen_gif, "congratulations1.gif");
             } else if (strcmp(token, "G1") == 0) {
                 g_idle_add(show_fullscreen_gif, "gameover1.gif");
-                 // Reset tokens safely
-              //  g_mutex_lock(&token_mutex); // Add mutex if using threads
+                // Reset tokens safely
                 strncpy(current_token, "--", sizeof(current_token));
                 strncpy(previous_token, "--", sizeof(previous_token));
                 strncpy(preceding_token, "--", sizeof(preceding_token));
-              //  g_mutex_unlock(&token_mutex);
-                
+
                 g_idle_add(update_ui_from_serial, NULL);
             } else {
                 // Close GIF if normal token arrives
                 if (gif_window) {
                     gtk_widget_destroy(gif_window);
                     gif_window = NULL;
+                    gif_player_cleanup();
                 }
                 shift_tokens(token);
                 g_idle_add(update_ui_from_serial, NULL);
@@ -289,9 +354,7 @@ void cleanup_images(void) {
     remove("current.png");
     remove("previous.png");
     remove("preceding.png");
-    if (gif_window) {
-        gtk_widget_destroy(gif_window);
-    }
+    gif_player_cleanup();
 }
 
 int main(int argc, char *argv[]) {
