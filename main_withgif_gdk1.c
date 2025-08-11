@@ -181,18 +181,19 @@ gboolean refresh_images_on_ui(gpointer user_data) {
 // ---------- Thread: Generate images then refresh UI ----------
 void *image_generator_thread(void *arg) {
     generate_token_image(current_image, current_token, "Current Draw", "current.png", "peachpuff", "red",
-                         0.78, 0.18, 0.1, -0.07, 0.05, 0.41,
-                         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-                         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf");
+                     0.78, 0.18, 0.1, -0.07, 0.05, 0.41,
+                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 
+                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
 
-    generate_token_image(previous_image, previous_token, "Previous Draw", "previous.png", "peachpuff", "blue",
-                         0.70, 0.10, -0.04, -0.03, -0.06, 0.30,
-                         "DejaVuSans-Bold", "DejaVuSans");
+generate_token_image(previous_image, previous_token, "Previous Draw", "previous.png", "peachpuff", "blue",
+                     0.70, 0.10, -0.04, -0.03, -0.06, 0.30,
+                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 
+                     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
 
-    generate_token_image(preceding_image, preceding_token, "Preceding Draw", "preceding.png", "peachpuff", "brown",
-                         0.92, 0.17, -0.08, -0.1, -0.05, 0.35,
-                         "DejaVuSans-Bold", "DejaVuSans");
-
+generate_token_image(preceding_image, preceding_token, "Preceding Draw", "preceding.png", "peachpuff", "brown",
+                     0.92, 0.17, -0.08, -0.1, -0.05, 0.35,
+                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 
+                     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
     g_idle_add(refresh_images_on_ui, NULL);
     return NULL;
 }
