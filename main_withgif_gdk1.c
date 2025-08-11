@@ -91,7 +91,7 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     gtk_widget_show_all(gif_window);
 
     // MODIFIED: Auto-close after 5 seconds and refresh tokens
-    g_timeout_add_seconds(5, close_gif_and_restore, update_ui_from_serial);
+    //g_timeout_add_seconds(5, close_gif_and_restore, update_ui_from_serial);
 
     return FALSE;
 }
