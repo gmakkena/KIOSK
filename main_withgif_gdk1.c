@@ -124,19 +124,21 @@ void mpv_start_preloaded() {
         
         execl("/usr/bin/mpv", "mpv",
               "--idle=yes",
-              "--no-terminal",
-              "--really-quiet",
               "--input-ipc-server=/tmp/mpv_socket",
               "--force-window=yes",
-              "--fs",
               "--no-border",
               "--keep-open=yes",
-              "--ontop",
+              "--ontop=yes",
+              "--really-quiet",
               "--no-terminal",
-              "--no-stop-screensaver",
-              "--on-all-workspaces",
+              "--fs",
+              "--keep-open=always",
+              "--window-scale=1.0",
+              "--video-sync=display-resample",
+              "--no-keepaspect",
               "--no-keepaspect-window",
-              "--geometry=0:0",
+              "--screen=0",
+              "--wid=0",
               "black.png",
               NULL);
               
@@ -163,36 +165,45 @@ void mpv_set_ontop(gboolean enable) {
 void mpv_play_gif(const char *filename) {
     debug_log("Starting to play GIF");
     
-    // First ensure the window is ready
-    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"on-all-workspaces\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"keep-open\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
-    usleep(100000);  // Small delay
-
-    // Force window to front
-    mpv_send_command("{\"command\": [\"set_property\", \"focus\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"border\", false]}");
+    // Stop any current playback and reset state
+    mpv_send_command("{\"command\": [\"stop\"]}");
+    usleep(50000);  // Short delay
     
-    // Load and play the file
-    char cmd[512];
+    // Set window properties
+    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"window-minimized\", false]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"force-window\", true]}");
+    
+    // Load the file with specific options
+    char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-             "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}",
+             "{\"command\": [\"loadfile\", \"%s\", \"replace\", "
+             "\"fullscreen=yes\", \"ontop=yes\", \"force-window=yes\"]}",
              filename);
     mpv_send_command(cmd);
     
-    // Ensure playback and visibility
-    usleep(100000);  // Wait for file to load
-    mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"focus\", true]}");
+    // Ensure playback and visibility with multiple attempts
+    for(int i = 0; i < 3; i++) {
+        usleep(100000);
+        mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");
+        mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
+        mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
+    }
+    
     debug_log("GIF playback started");
 }
 
 void mpv_stop_gif() {
-    // Stop playback and load black screen
+    // Stop playback
+    mpv_send_command("{\"command\": [\"stop\"]}");
+    usleep(50000);
+    
+    // Load black screen and set window properties
     mpv_send_command("{\"command\": [\"loadfile\", \"black.png\", \"replace\"]}");
     mpv_send_command("{\"command\": [\"set_property\", \"ontop\", false]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", false]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"window-minimized\", true]}");
 }
 
 // ---------- Generate Token Image ----------
