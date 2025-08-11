@@ -81,15 +81,28 @@ void mpv_start_preloaded() {
     }
 }
 
+void mpv_set_ontop(gboolean enable) {
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd),
+             "{\"command\": [\"set_property\", \"ontop\", %s]}",
+             enable ? "true" : "false");
+    mpv_send_command(cmd);
+}
+
 void mpv_play_gif(const char *filename) {
+    // Bring mpv window on top when playing GIF
+    mpv_set_ontop(TRUE);
     char cmd[512];
-    snprintf(cmd, sizeof(cmd), "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}", filename);
+    snprintf(cmd, sizeof(cmd),
+             "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}",
+             filename);
     mpv_send_command(cmd);
 }
 
 void mpv_stop_gif() {
-    // Load a black image to effectively "stop" GIF display
+    // Load black image and disable ontop to hide mpv window behind GTK
     mpv_play_gif("black.png");
+    mpv_set_ontop(FALSE);
 }
 
 // ---------- Generate Token Image ----------
