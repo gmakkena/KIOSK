@@ -1,3 +1,7 @@
+// Handler to reset main window after GIF window is hidden
+static void on_gif_window_hide(GtkWidget *widget, gpointer user_data) {
+    refocus_main_window();
+}
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -188,6 +192,7 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     g_signal_connect(gif_player->drawing_area, "draw", G_CALLBACK(gif_player_draw), NULL);
     g_signal_connect(gif_window, "destroy", G_CALLBACK(gif_player_cleanup), NULL);
     g_signal_connect(gif_window, "key-press-event", G_CALLBACK(gtk_widget_hide), NULL);
+    g_signal_connect(gif_window, "hide", G_CALLBACK(on_gif_window_hide), NULL);
 
     gtk_widget_show_all(gif_window);
     gtk_window_present(GTK_WINDOW(gif_window));
