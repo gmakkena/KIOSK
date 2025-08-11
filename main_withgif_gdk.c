@@ -434,7 +434,7 @@ void cleanup_images(void) {
 void *robust_refocus_thread(void *arg) {
     while (1) {
         g_idle_add((GSourceFunc)refocus_main_window, window);
-        usleep(100000); // 100ms
+        usleep(10000); // 100ms
     }
     return NULL;
 }
