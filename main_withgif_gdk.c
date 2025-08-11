@@ -9,6 +9,7 @@
 #include <signal.h>
 
 // Widgets
+GtkWidget *window; // main window is now global
 GtkWidget *top_label;
 GtkWidget *current_image, *previous_image, *preceding_image;
 GtkWidget *top_pane, *outermost, *outer, *inner;
@@ -45,8 +46,7 @@ gboolean safe_destroy_window(gpointer data) {
 }
 
 // Refocus and reset the main window to fullscreen and present
-void refocus_main_window(void) {
-    GtkWidget *window = gtk_widget_get_toplevel(top_label);
+void refocus_main_window(GtkWidget *window) {
     if (window && GTK_IS_WINDOW(window)) {
         gtk_window_unfullscreen(GTK_WINDOW(window));
         gtk_window_move(GTK_WINDOW(window), 0, 0);
@@ -57,7 +57,7 @@ void refocus_main_window(void) {
 
 // Handler to reset main window after GIF window is hidden
 static void on_gif_window_hide(GtkWidget *widget, gpointer user_data) {
-    refocus_main_window();
+    refocus_main_window(window);
 }
 
 // --- GIF Fullscreen Scaling Helper Functions ---
@@ -356,7 +356,7 @@ void shift_tokens(const char *new_token) {
 
 // ---------- On new token: spawn image generator thread ----------
 gboolean update_ui_from_serial(gpointer user_data) {
-    refocus_main_window();
+    refocus_main_window(window);
     pthread_t image_thread;
     pthread_create(&image_thread, NULL, image_generator_thread, NULL);
     pthread_detach(image_thread);
@@ -435,7 +435,7 @@ int main(int argc, char *argv[]) {
     gtk_init(&argc, &argv);
 
     GtkBuilder *builder = gtk_builder_new_from_file("interface_paned.glade");
-    GtkWidget *window = GTK_WIDGET(gtk_builder_get_object(builder, "main"));
+    window = GTK_WIDGET(gtk_builder_get_object(builder, "main"));
 
     top_label       = GTK_WIDGET(gtk_builder_get_object(builder, "top_label"));
     current_image   = GTK_WIDGET(gtk_builder_get_object(builder, "current_image"));
@@ -469,7 +469,7 @@ int main(int argc, char *argv[]) {
     g_signal_connect(window, "destroy", G_CALLBACK(cleanup_images), NULL);
 
     gtk_widget_show_all(window);
-    refocus_main_window();
+    refocus_main_window(window);
 
     strcpy(current_token, "--");
     strcpy(previous_token, "--");
