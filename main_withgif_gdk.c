@@ -87,27 +87,28 @@ static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
 
     int da_width = gtk_widget_get_allocated_width(widget);
     int da_height = gtk_widget_get_allocated_height(widget);
-
     if (da_width < 1 || da_height < 1) return FALSE;
 
-    // Get the original dimensions and format
     int orig_width = gdk_pixbuf_get_width(frame);
     int orig_height = gdk_pixbuf_get_height(frame);
-    
-    // Calculate scaling factors
-    double scale_x = (double)da_width / orig_width;
-    double scale_y = (double)da_height / orig_height;
-    
-    // Scale the cairo context instead of the pixbuf
-    cairo_scale(cr, scale_x, scale_y);
-    
-    // Draw the original frame directly
+    if (orig_height == 0) return FALSE;
+
+    // Fit to height, maintain aspect ratio
+    double scale = (double)da_height / orig_height;
+    int scaled_width = (int)(orig_width * scale);
+    int x_offset = (da_width - scaled_width) / 2;
+
+    // Set background to black
+    cairo_set_source_rgb(cr, 0, 0, 0);
+    cairo_paint(cr);
+
+    cairo_save(cr);
+    cairo_translate(cr, x_offset, 0);
+    cairo_scale(cr, scale, scale);
     gdk_cairo_set_source_pixbuf(cr, frame, 0, 0);
     cairo_paint(cr);
-    
-    // Reset the scale
-    cairo_scale(cr, 1.0/scale_x, 1.0/scale_y);
-    
+    cairo_restore(cr);
+
     return FALSE;
 }
 
