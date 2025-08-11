@@ -1,3 +1,12 @@
+// Refocus and reposition the main window to (0,0) and fullscreen
+void refocus_main_window(void) {
+    GtkWidget *window = gtk_widget_get_toplevel(top_label);
+    if (window && GTK_IS_WINDOW(window)) {
+        gtk_window_move(GTK_WINDOW(window), 0, 0);
+        gtk_window_fullscreen(GTK_WINDOW(window));
+        gtk_window_present(GTK_WINDOW(window));
+    }
+}
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -375,6 +384,8 @@ void *serial_reader_thread(void *arg) {
                 // Hide GIF window if open, do not destroy
                 if (gif_window) {
                     gtk_widget_hide(gif_window);
+                    // Refocus and reposition the main window
+                    g_idle_add((GSourceFunc)refocus_main_window, NULL);
                 }
                 shift_tokens(token);
                 g_idle_add(update_ui_from_serial, NULL);
