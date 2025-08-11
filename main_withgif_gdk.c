@@ -110,10 +110,40 @@ static void gif_player_cleanup() {
 gboolean show_fullscreen_gif(gpointer filename_ptr) {
     const char *filename = (const char *)filename_ptr;
 
-    // Cleanup existing GIF window/player if open
-    gif_player_cleanup();
+    // If the window already exists, just update the animation
+    if (gif_window && gif_player) {
+        // Stop previous timer
+        if (gif_player->timeout_id) {
+            g_source_remove(gif_player->timeout_id);
+            gif_player->timeout_id = 0;
+        }
+        // Free previous animation/iter
+        if (gif_player->iter) {
+            g_object_unref(gif_player->iter);
+            gif_player->iter = NULL;
+        }
+        if (gif_player->animation) {
+            g_object_unref(gif_player->animation);
+            gif_player->animation = NULL;
+        }
+        // Load new animation
+        GError *error = NULL;
+        gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
+        if (error || !gif_player->animation || !GDK_IS_PIXBUF_ANIMATION(gif_player->animation)) {
+            g_printerr("GIF Error loading %s: %s\n", filename, error ? error->message : "Invalid animation");
+            if (error) g_error_free(error);
+            return FALSE;
+        }
+        gif_player->iter = gdk_pixbuf_animation_get_iter(gif_player->animation, NULL);
+        g_timer_start(gif_player->timer);
+        gif_player->timeout_id = g_timeout_add(10, gif_player_advance, NULL);
+        gtk_widget_show_all(gif_window);
+        gtk_window_present(GTK_WINDOW(gif_window));
+        gdk_window_focus(gtk_widget_get_window(gif_window), GDK_CURRENT_TIME);
+        return FALSE;
+    }
 
-    // Create new fullscreen window
+    // If not, create the window and player as before
     gif_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_decorated(GTK_WINDOW(gif_window), FALSE);
     gtk_window_fullscreen(GTK_WINDOW(gif_window));
@@ -126,10 +156,8 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     gtk_style_context_add_provider(gtk_widget_get_style_context(gif_window),
         GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
-    // Allocate gif player struct
     gif_player = g_new0(GifPlayer, 1);
 
-    // Load animation
     GError *error = NULL;
     gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
     if (error) {
@@ -144,17 +172,17 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     gif_player->iter = gdk_pixbuf_animation_get_iter(gif_player->animation, NULL);
     gif_player->timer = g_timer_new();
 
-    // Drawing area to render gif
     gif_player->drawing_area = gtk_drawing_area_new();
     gtk_container_add(GTK_CONTAINER(gif_window), gif_player->drawing_area);
 
     g_signal_connect(gif_player->drawing_area, "draw", G_CALLBACK(gif_player_draw), NULL);
     g_signal_connect(gif_window, "destroy", G_CALLBACK(gif_player_cleanup), NULL);
-    g_signal_connect(gif_window, "key-press-event", G_CALLBACK(gtk_widget_destroy), NULL);
+    g_signal_connect(gif_window, "key-press-event", G_CALLBACK(gtk_widget_hide), NULL);
 
     gtk_widget_show_all(gif_window);
+    gtk_window_present(GTK_WINDOW(gif_window));
+    gdk_window_focus(gtk_widget_get_window(gif_window), GDK_CURRENT_TIME);
 
-    // Start animation timer
     gif_player->timeout_id = g_timeout_add(10, gif_player_advance, NULL);
 
     return FALSE;
@@ -344,11 +372,9 @@ void *serial_reader_thread(void *arg) {
 
                 g_idle_add(update_ui_from_serial, NULL);
             } else {
-                // Close GIF if normal token arrives
+                // Hide GIF window if open, do not destroy
                 if (gif_window) {
-                    gtk_widget_destroy(gif_window);
-                    gif_window = NULL;
-                    gif_player_cleanup();
+                    gtk_widget_hide(gif_window);
                 }
                 shift_tokens(token);
                 g_idle_add(update_ui_from_serial, NULL);
