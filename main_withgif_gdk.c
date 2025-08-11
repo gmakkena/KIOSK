@@ -44,11 +44,11 @@ gboolean safe_destroy_window(gpointer data) {
     return G_SOURCE_REMOVE;
 }
 
-// Refocus and reposition the main window to (0,0) and fullscreen
+// Refocus and reset the main window to fullscreen and present
 void refocus_main_window(void) {
     GtkWidget *window = gtk_widget_get_toplevel(top_label);
     if (window && GTK_IS_WINDOW(window)) {
-        gtk_window_move(GTK_WINDOW(window), 0, 0);
+        gtk_window_unfullscreen(GTK_WINDOW(window));
         gtk_window_fullscreen(GTK_WINDOW(window));
         gtk_window_present(GTK_WINDOW(window));
     }
