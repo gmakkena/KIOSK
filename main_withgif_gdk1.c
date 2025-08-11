@@ -101,43 +101,22 @@ void mpv_set_ontop(gboolean enable) {
 }
 
 void mpv_play_gif(const char *filename) {
-    // First bring window to front and make it visible
-    mpv_send_command("{\"command\": [\"set_property\", \"pause\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"visibility\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"border\", false]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
-    
-    // Load and play the file
+    // Load the file first
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
              "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}",
              filename);
     mpv_send_command(cmd);
     
-    // Force window parameters again after load
-    usleep(100000);  // Small delay to ensure window is ready
-    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"visibility\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
+    // Make sure it's playing and visible
     mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");
-    
-    // One final ensure-on-top after playback starts
-    usleep(100000);
+    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
     mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
 }
 
 void mpv_stop_gif() {
-    // Pause playback first
-    mpv_send_command("{\"command\": [\"set_property\", \"pause\", true]}");
-    
-    // Hide the window by removing ontop and loading black screen
-    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", false]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"visibility\", false]}");
+    // Stop playback and load black screen
     mpv_send_command("{\"command\": [\"loadfile\", \"black.png\", \"replace\"]}");
-    
-    // Ensure it stays hidden
-    usleep(50000);
     mpv_send_command("{\"command\": [\"set_property\", \"ontop\", false]}");
 }
 
