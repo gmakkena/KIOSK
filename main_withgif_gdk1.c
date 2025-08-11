@@ -71,8 +71,10 @@ void mpv_start_preloaded() {
                "--no-border",       // Remove window decorations
                "--x11-name=mpv_kiosk", // Set specific window name
                "--ontop=no",        // Start not on top
-               "--background=0.0",  // Make background transparent
-               "--alpha=no",        // Disable alpha channel
+               "--no-keepaspect",   // Don't maintain aspect ratio
+               "--no-keepaspect-window", // Allow window to stretch
+               "--geometry=0:0",    // Start at top-left
+               "--screen=0",        // Use primary screen
                "black.png", // start with a dummy blank image
                (char *)NULL);
         perror("mpv launch failed");
@@ -95,30 +97,31 @@ void mpv_set_ontop(gboolean enable) {
 }
 
 void mpv_play_gif(const char *filename) {
-    // First load the file
+    // First ensure proper window state
+    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"geometry\", \"0:0\"]}");
+    
+    // Load and play the file
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
              "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}",
              filename);
     mpv_send_command(cmd);
-
-    // Make sure we're in fullscreen and properly positioned
-    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
     
-    // Ensure window is visible and on top
-    mpv_set_ontop(TRUE);
-    
-    // Ensure it's playing
+    // Force window parameters again after load
     mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
 }
 
 void mpv_stop_gif() {
-    // Load a blank/transparent frame to effectively hide the window
-    mpv_send_command("{\"command\": [\"loadfile\", \"black.png\", \"replace\"]}");
-    
-    // Remove from top and pause
-    mpv_set_ontop(FALSE);
+    // First pause and remove from top
     mpv_send_command("{\"command\": [\"set_property\", \"pause\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", false]}");
+    
+    // Load black screen and force position
+    mpv_send_command("{\"command\": [\"loadfile\", \"black.png\", \"replace\"]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"geometry\", \"0:0\"]}");
 }
 
 // ---------- Generate Token Image ----------
