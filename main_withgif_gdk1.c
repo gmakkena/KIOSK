@@ -70,6 +70,8 @@ void mpv_start_preloaded() {
                "--force-window=yes",
                "--no-border",       // Remove window decorations
                "--x11-name=mpv_kiosk", // Set specific window name
+               "--ontop=no",        // Start not on top
+               "--window-minimized=yes", // Start minimized
                "black.png", // start with a dummy blank image
                (char *)NULL);
         perror("mpv launch failed");
@@ -92,14 +94,15 @@ void mpv_set_ontop(gboolean enable) {
 }
 
 void mpv_play_gif(const char *filename) {
-    // Load the gif file and show mpv window on top
-    mpv_set_ontop(TRUE);
-
     // Set window position and size to full screen
     char pos_cmd[256];
     snprintf(pos_cmd, sizeof(pos_cmd),
              "{\"command\": [\"set_property\", \"geometry\", \"100%%x100%%+0+0\"]}");
     mpv_send_command(pos_cmd);
+
+    // Show the window and bring it to front
+    mpv_send_command("{\"command\": [\"set_property\", \"window-minimized\", false]}");
+    mpv_set_ontop(TRUE);
 
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
@@ -112,10 +115,11 @@ void mpv_play_gif(const char *filename) {
 }
 
 void mpv_stop_gif() {
-    // Pause playback and hide mpv window by removing ontop
+    // Pause playback and hide mpv window
     mpv_send_command("{\"command\": [\"set_property\", \"pause\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"geometry\", \"100%x100%+0+0\"]}");
     mpv_set_ontop(FALSE);
+    // Minimize the window to hide it
+    mpv_send_command("{\"command\": [\"set_property\", \"window-minimized\", true]}");
 }
 
 // ---------- Generate Token Image ----------
