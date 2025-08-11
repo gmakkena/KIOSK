@@ -13,6 +13,9 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <errno.h>
+#include <sys/stat.h>
+
+#define MPV_PATH "/usr/bin/mpv"
 
 // Debug function
 void debug_log(const char *msg) {
@@ -42,8 +45,23 @@ char preceding_token[32] = "--";
 // MPV IPC
 pid_t mpv_pid = -1;
 const char *mpv_socket_path = "/tmp/mpv_socket";
+int mpv_ready = 0;
 
 // ---------- MPV Control ----------
+void ensure_mpv_running() {
+    debug_log("Checking MPV status");
+    
+    // Check if the socket exists and is accessible
+    if (access(mpv_socket_path, F_OK) != 0) {
+        debug_log("MPV socket not found, starting MPV");
+        if (mpv_pid > 0) {
+            kill(mpv_pid, SIGTERM);
+            usleep(500000);  // Wait for process to terminate
+        }
+        mpv_start_preloaded();
+        usleep(1000000);  // Wait for MPV to initialize
+    }
+}
 int mpv_send_command(const char *cmd) {
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock < 0) {
@@ -126,26 +144,23 @@ void mpv_set_ontop(gboolean enable) {
 void mpv_play_gif(const char *filename) {
     debug_log("Starting to play GIF");
     
-    // Ensure window is visible and on top
-    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
+    // First ensure window properties
     mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"visibility\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
+    usleep(100000);  // Small delay
     
-    // Load and play the file
+    // Load the file
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
              "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}",
              filename);
-    debug_log("Loading GIF file");
     mpv_send_command(cmd);
     
-    // Force window parameters
-    usleep(100000);  // Small delay
+    // Ensure it's playing and visible
+    usleep(100000);  // Wait for file to load
     mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");
     mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"window-minimized\", false]}");
-    
-    debug_log("GIF playback setup complete");
+    debug_log("GIF playback started");
 }
 
 void mpv_stop_gif() {
@@ -363,8 +378,19 @@ void cleanup_images(void) {
 int main(int argc, char *argv[]) {
     gtk_init(&argc, &argv);
 
+    debug_log("Starting program");
+    
+    // Create /tmp directory if it doesn't exist
+    mkdir("/tmp", 0777);
+    
+    // Remove any existing socket
+    unlink(mpv_socket_path);
+    
     // Start mpv in idle mode
     mpv_start_preloaded();
+    
+    // Wait for MPV to initialize
+    usleep(2000000);  // Wait 2 seconds
 
     GtkBuilder *builder = gtk_builder_new_from_file("interface_paned.glade");
     GtkWidget *window = GTK_WIDGET(gtk_builder_get_object(builder, "main"));
