@@ -73,8 +73,12 @@ void mpv_start_preloaded() {
                "--ontop=no",        // Start not on top
                "--no-keepaspect",   // Don't maintain aspect ratio
                "--no-keepaspect-window", // Allow window to stretch
-               "--geometry=0:0",    // Start at top-left
                "--screen=0",        // Use primary screen
+               "--window-scale=1.0", // Full size
+               "--no-focus-on-open", // Don't focus when starting
+               "--pause=yes",       // Start paused
+               "--video-sync=display-resample", // Smoother playback
+               "--priority=high",   // High priority playback
                "black.png", // start with a dummy blank image
                (char *)NULL);
         perror("mpv launch failed");
@@ -97,10 +101,12 @@ void mpv_set_ontop(gboolean enable) {
 }
 
 void mpv_play_gif(const char *filename) {
-    // First ensure proper window state
-    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
+    // First bring window to front and make it visible
+    mpv_send_command("{\"command\": [\"set_property\", \"pause\", true]}");
     mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"geometry\", \"0:0\"]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"visibility\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"border\", false]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
     
     // Load and play the file
     char cmd[512];
@@ -110,18 +116,29 @@ void mpv_play_gif(const char *filename) {
     mpv_send_command(cmd);
     
     // Force window parameters again after load
+    usleep(100000);  // Small delay to ensure window is ready
+    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"visibility\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
     mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");
+    
+    // One final ensure-on-top after playback starts
+    usleep(100000);
     mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
 }
 
 void mpv_stop_gif() {
-    // First pause and remove from top
+    // Pause playback first
     mpv_send_command("{\"command\": [\"set_property\", \"pause\", true]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", false]}");
     
-    // Load black screen and force position
+    // Hide the window by removing ontop and loading black screen
+    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", false]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"visibility\", false]}");
     mpv_send_command("{\"command\": [\"loadfile\", \"black.png\", \"replace\"]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"geometry\", \"0:0\"]}");
+    
+    // Ensure it stays hidden
+    usleep(50000);
+    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", false]}");
 }
 
 // ---------- Generate Token Image ----------
