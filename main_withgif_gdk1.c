@@ -14,6 +14,16 @@
 #include <sys/un.h>
 #include <errno.h>
 
+// Debug function
+void debug_log(const char *msg) {
+    FILE *f = fopen("debug.log", "a");
+    if (f) {
+        time_t now = time(NULL);
+        fprintf(f, "[%ld] %s\n", now, msg);
+        fclose(f);
+    }
+}
+
 // Widgets
 GtkWidget *top_label;
 GtkWidget *current_image, *previous_image, *preceding_image;
@@ -36,7 +46,10 @@ const char *mpv_socket_path = "/tmp/mpv_socket";
 // ---------- MPV Control ----------
 int mpv_send_command(const char *cmd) {
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (sock < 0) return -1;
+    if (sock < 0) {
+        debug_log("Failed to create socket");
+        return -1;
+    }
 
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
@@ -44,12 +57,22 @@ int mpv_send_command(const char *cmd) {
     strncpy(addr.sun_path, mpv_socket_path, sizeof(addr.sun_path)-1);
 
     if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        debug_log("Failed to connect to MPV socket");
         close(sock);
         return -1;
     }
 
     write(sock, cmd, strlen(cmd));
     write(sock, "\n", 1);
+    
+    // Read response
+    char response[1024];
+    int n = read(sock, response, sizeof(response)-1);
+    if (n > 0) {
+        response[n] = '\0';
+        debug_log(response);
+    }
+    
     close(sock);
     return 0;
 }
@@ -101,17 +124,28 @@ void mpv_set_ontop(gboolean enable) {
 }
 
 void mpv_play_gif(const char *filename) {
-    // Load the file first
+    debug_log("Starting to play GIF");
+    
+    // Ensure window is visible and on top
+    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"visibility\", true]}");
+    
+    // Load and play the file
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
              "{\"command\": [\"loadfile\", \"%s\", \"replace\"]}",
              filename);
+    debug_log("Loading GIF file");
     mpv_send_command(cmd);
     
-    // Make sure it's playing and visible
+    // Force window parameters
+    usleep(100000);  // Small delay
     mpv_send_command("{\"command\": [\"set_property\", \"pause\", false]}");
-    mpv_send_command("{\"command\": [\"set_property\", \"fullscreen\", true]}");
     mpv_send_command("{\"command\": [\"set_property\", \"ontop\", true]}");
+    mpv_send_command("{\"command\": [\"set_property\", \"window-minimized\", false]}");
+    
+    debug_log("GIF playback setup complete");
 }
 
 void mpv_stop_gif() {
