@@ -1,3 +1,8 @@
+// Proper handler for map-event to ensure window is at (0,0) and fullscreen when mapped
+static gboolean on_main_window_map(GtkWidget *widget, GdkEvent *event, gpointer user_data) {
+    refocus_main_window();
+    return FALSE; // propagate event
+}
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -469,7 +474,7 @@ int main(int argc, char *argv[]) {
     g_signal_connect(window, "destroy", G_CALLBACK(cleanup_images), NULL);
 
     gtk_widget_show_all(window);
-    g_signal_connect(window, "map-event", G_CALLBACK(refocus_main_window), NULL);
+    g_signal_connect(window, "map-event", G_CALLBACK(on_main_window_map), NULL);
 
     strcpy(current_token, "--");
     strcpy(previous_token, "--");
