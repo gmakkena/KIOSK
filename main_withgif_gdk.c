@@ -60,129 +60,62 @@ static gboolean gif_player_advance(gpointer data) {
 }
 
 static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
-    if (!gif_player || !gif_player->iter || !gif_player->animation) {
-        g_print("Draw callback: Invalid gif_player state\n");
-        return FALSE;
-    }
+    if (!gif_player || !gif_player->iter) return FALSE;
 
-    // Get the current frame
     GdkPixbuf *frame = gdk_pixbuf_animation_iter_get_pixbuf(gif_player->iter);
-    if (!frame || !GDK_IS_PIXBUF(frame)) {
-        g_print("Draw callback: Invalid frame pixbuf\n");
-        return FALSE;
-    }
+    if (!frame) return FALSE;
 
     int da_width = gtk_widget_get_allocated_width(widget);
     int da_height = gtk_widget_get_allocated_height(widget);
 
-    if (da_width < 1 || da_height < 1) {
-        g_print("Draw callback: Invalid drawing area dimensions\n");
-        return FALSE;
-    }
+    if (da_width < 1 || da_height < 1) return FALSE;
 
-    // Create a new scaled pixbuf
-    GError *error = NULL;
-    GdkPixbuf *scaled = gdk_pixbuf_scale_simple(frame, 
-                                               da_width, 
-                                               da_height, 
-                                               GDK_INTERP_BILINEAR);
+    // Get the original dimensions and format
+    int orig_width = gdk_pixbuf_get_width(frame);
+    int orig_height = gdk_pixbuf_get_height(frame);
     
-    if (!scaled || !GDK_IS_PIXBUF(scaled)) {
-        g_print("Draw callback: Failed to create scaled pixbuf\n");
-        return FALSE;
-    }
-
-    // Set background to black
-    cairo_set_source_rgb(cr, 0, 0, 0);
+    // Calculate scaling factors
+    double scale_x = (double)da_width / orig_width;
+    double scale_y = (double)da_height / orig_height;
+    
+    // Scale the cairo context instead of the pixbuf
+    cairo_scale(cr, scale_x, scale_y);
+    
+    // Draw the original frame directly
+    gdk_cairo_set_source_pixbuf(cr, frame, 0, 0);
     cairo_paint(cr);
-
-    // Draw the scaled pixbuf
-    gdk_cairo_set_source_pixbuf(cr, scaled, 0, 0);
-    cairo_paint(cr);
-
-    g_object_unref(scaled);
+    
+    // Reset the scale
+    cairo_scale(cr, 1.0/scale_x, 1.0/scale_y);
+    
     return FALSE;
 }
 
-static gboolean delayed_cleanup(gpointer user_data) {
+static void gif_player_cleanup() {
     if (gif_player) {
-        g_print("Starting delayed cleanup of gif_player resources\n");
-        
-        if (gif_player->timeout_id) {
-            g_source_remove(gif_player->timeout_id);
-            gif_player->timeout_id = 0;
-        }
-        
-        if (gif_player->iter) {
-            g_object_unref(gif_player->iter);
-            gif_player->iter = NULL;
-        }
-        
-        if (gif_player->animation) {
-            g_object_unref(gif_player->animation);
-            gif_player->animation = NULL;
-        }
-        
-        if (gif_player->timer) {
-            g_timer_destroy(gif_player->timer);
-            gif_player->timer = NULL;
-        }
-        
-        // Don't free drawing_area as it's owned by the window
-        gif_player->drawing_area = NULL;
-        
-        GifPlayer *temp = gif_player;
-        gif_player = NULL;  // Clear global first
-        g_free(temp);       // Then free the memory
+        if (gif_player->timeout_id) g_source_remove(gif_player->timeout_id);
+        if (gif_player->animation) g_object_unref(gif_player->animation);
+        if (gif_player->iter) g_object_unref(gif_player->iter);
+        if (gif_player->timer) g_timer_destroy(gif_player->timer);
+        g_free(gif_player);
+        gif_player = NULL;
     }
-    
     if (gif_window) {
-        gtk_widget_hide(gif_window);  // Hide first to prevent visual artifacts
         gtk_widget_destroy(gif_window);
         gif_window = NULL;
     }
-    
-    return G_SOURCE_REMOVE;
 }
-
-static void gif_player_cleanup() {
-    // Schedule the cleanup to happen in the main thread
-    g_idle_add(delayed_cleanup, NULL);
-}
-
 
 // ---------- Show Fullscreen GIF (now stretched to fit) ----------
 gboolean show_fullscreen_gif(gpointer filename_ptr) {
     const char *filename = (const char *)filename_ptr;
-    g_print("Attempting to show GIF: %s\n", filename);
 
     // Cleanup existing GIF window/player if open
     gif_player_cleanup();
 
-    // Verify file exists first
-    if (!g_file_test(filename, G_FILE_TEST_EXISTS)) {
-        g_printerr("GIF file does not exist: %s\n", filename);
-        return FALSE;
-    }
-
     // Create new fullscreen window
     gif_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_decorated(GTK_WINDOW(gif_window), FALSE);
-    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(gif_window), TRUE);
-    gtk_window_set_skip_pager_hint(GTK_WINDOW(gif_window), TRUE);
-    
-    // Set window type hint to ensure it stays on top
-    gtk_window_set_type_hint(GTK_WINDOW(gif_window), GDK_WINDOW_TYPE_HINT_SPLASHSCREEN);
-    
-    // Get screen dimensions using GDK display methods
-    GdkDisplay *display = gdk_display_get_default();
-    GdkWindow *root = gdk_get_default_root_window();
-    gint screen_width, screen_height;
-    gdk_window_get_geometry(root, NULL, NULL, &screen_width, &screen_height);
-    
-    // Set window position and size
-    gtk_window_move(GTK_WINDOW(gif_window), 0, 0);
-    gtk_window_set_default_size(GTK_WINDOW(gif_window), screen_width, screen_height);
     gtk_window_fullscreen(GTK_WINDOW(gif_window));
     gtk_window_set_keep_above(GTK_WINDOW(gif_window), TRUE);
 
@@ -192,24 +125,15 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
         "window { background-color: black; }", -1, NULL);
     gtk_style_context_add_provider(gtk_widget_get_style_context(gif_window),
         GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-    g_object_unref(css);
 
     // Allocate gif player struct
     gif_player = g_new0(GifPlayer, 1);
-    if (!gif_player) {
-        g_printerr("Failed to allocate GifPlayer structure\n");
-        gtk_widget_destroy(gif_window);
-        gif_window = NULL;
-        return FALSE;
-    }
 
-    // Load animation with detailed error checking
+    // Load animation
     GError *error = NULL;
-    g_print("Loading animation from file: %s\n", filename);
     gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
-    
     if (error) {
-        g_printerr("GIF Error loading %s: %s\n", filename, error->message);
+        g_printerr("GIF Error: %s\n", error->message);
         g_error_free(error);
         g_free(gif_player);
         gif_player = NULL;
@@ -217,80 +141,21 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
         gif_window = NULL;
         return FALSE;
     }
-    
-    if (!gif_player->animation || !GDK_IS_PIXBUF_ANIMATION(gif_player->animation)) {
-        g_printerr("Invalid animation object created for %s\n", filename);
-        if (gif_player->animation) {
-            g_object_unref(gif_player->animation);
-        }
-        g_free(gif_player);
-        gif_player = NULL;
-        gtk_widget_destroy(gif_window);
-        gif_window = NULL;
-        return FALSE;
-    }
-    // Initialize animation iter
-    GError *iter_error = NULL;
     gif_player->iter = gdk_pixbuf_animation_get_iter(gif_player->animation, NULL);
-    if (!gif_player->iter) {
-        g_printerr("Failed to create animation iterator\n");
-        g_object_unref(gif_player->animation);
-        g_free(gif_player);
-        gif_player = NULL;
-        gtk_widget_destroy(gif_window);
-        gif_window = NULL;
-        return FALSE;
-    }
-
-    // Create timer
     gif_player->timer = g_timer_new();
-    if (!gif_player->timer) {
-        g_printerr("Failed to create timer\n");
-        g_object_unref(gif_player->iter);
-        g_object_unref(gif_player->animation);
-        g_free(gif_player);
-        gif_player = NULL;
-        gtk_widget_destroy(gif_window);
-        gif_window = NULL;
-        return FALSE;
-    }
 
-    // Create drawing area
+    // Drawing area to render gif
     gif_player->drawing_area = gtk_drawing_area_new();
     gtk_container_add(GTK_CONTAINER(gif_window), gif_player->drawing_area);
 
-    // Connect signals
-    gulong draw_handler = g_signal_connect(gif_player->drawing_area, "draw", 
-                                         G_CALLBACK(gif_player_draw), NULL);
-    if (draw_handler == 0) {
-        g_printerr("Failed to connect draw signal\n");
-        g_timer_destroy(gif_player->timer);
-        g_object_unref(gif_player->iter);
-        g_object_unref(gif_player->animation);
-        g_free(gif_player);
-        gif_player = NULL;
-        gtk_widget_destroy(gif_window);
-        gif_window = NULL;
-        return FALSE;
-    }
-
+    g_signal_connect(gif_player->drawing_area, "draw", G_CALLBACK(gif_player_draw), NULL);
     g_signal_connect(gif_window, "destroy", G_CALLBACK(gif_player_cleanup), NULL);
     g_signal_connect(gif_window, "key-press-event", G_CALLBACK(gtk_widget_destroy), NULL);
 
-    // Show window before starting animation
     gtk_widget_show_all(gif_window);
-    
-    // Force window to top after showing
-    gtk_window_present(GTK_WINDOW(gif_window));
-    gdk_window_focus(gtk_widget_get_window(gif_window), GDK_CURRENT_TIME);
-    
-    // Start animation timer with slightly faster refresh rate
-    gif_player->timeout_id = g_timeout_add(16, gif_player_advance, NULL);
-    if (gif_player->timeout_id == 0) {
-        g_printerr("Failed to create animation timer\n");
-        gif_player_cleanup();
-        return FALSE;
-    }
+
+    // Start animation timer
+    gif_player->timeout_id = g_timeout_add(10, gif_player_advance, NULL);
 
     return FALSE;
 }
@@ -469,16 +334,9 @@ void *serial_reader_thread(void *arg) {
             sscanf(buf, "%31s", token);
 
             if (strcmp(token, "C1") == 0) {
-                g_print("Received C1 token, showing congratulations GIF\n");
-                char *gif_path = g_build_filename(g_get_current_dir(), "congratulations1.gif", NULL);
-                g_print("Full path to congratulations GIF: %s\n", gif_path);
-                g_idle_add(show_fullscreen_gif, gif_path);
-                // Don't free gif_path as it's used by the idle callback
+                g_idle_add(show_fullscreen_gif, "congratulations1.gif");
             } else if (strcmp(token, "G1") == 0) {
-                g_print("Received G1 token, showing gameover GIF\n");
-                char *gif_path = g_build_filename(g_get_current_dir(), "gameover1.gif", NULL);
-                g_print("Full path to gameover GIF: %s\n", gif_path);
-                g_idle_add(show_fullscreen_gif, gif_path);
+                g_idle_add(show_fullscreen_gif, "gameover1.gif");
                 // Reset tokens safely
                 strncpy(current_token, "--", sizeof(current_token));
                 strncpy(previous_token, "--", sizeof(previous_token));
@@ -533,25 +391,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Setup main window to be immovable and always visible
-    gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
-    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window), TRUE);
-    gtk_window_set_skip_pager_hint(GTK_WINDOW(window), TRUE);
-    
-    // Get screen dimensions using GDK display methods
-    GdkDisplay *display = gdk_display_get_default();
-    GdkWindow *root = gdk_get_default_root_window();
-    gint screen_width, screen_height;
-    gdk_window_get_geometry(root, NULL, NULL, &screen_width, &screen_height);
-    
-    // Set window position and size
-    gtk_window_move(GTK_WINDOW(window), 0, 0);
-    gtk_window_set_default_size(GTK_WINDOW(window), screen_width, screen_height);
     gtk_window_fullscreen(GTK_WINDOW(window));
-    
-    // Prevent window from being moved
-    g_signal_connect(window, "configure-event", G_CALLBACK(gtk_true), NULL);
-    
+    gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
+
     GtkCssProvider *css_provider = gtk_css_provider_new();
     gtk_css_provider_load_from_path(css_provider, "style.css", NULL);
     gtk_style_context_add_provider_for_screen(
