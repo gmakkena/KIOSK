@@ -70,13 +70,24 @@ static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
 
     if (da_width < 1 || da_height < 1) return FALSE;
 
-    GdkPixbuf *scaled = gdk_pixbuf_scale_simple(
-        frame, da_width, da_height, GDK_INTERP_BILINEAR);
-
-    gdk_cairo_set_source_pixbuf(cr, scaled, 0, 0);
+    // Get the original dimensions and format
+    int orig_width = gdk_pixbuf_get_width(frame);
+    int orig_height = gdk_pixbuf_get_height(frame);
+    
+    // Calculate scaling factors
+    double scale_x = (double)da_width / orig_width;
+    double scale_y = (double)da_height / orig_height;
+    
+    // Scale the cairo context instead of the pixbuf
+    cairo_scale(cr, scale_x, scale_y);
+    
+    // Draw the original frame directly
+    gdk_cairo_set_source_pixbuf(cr, frame, 0, 0);
     cairo_paint(cr);
-
-    g_object_unref(scaled);
+    
+    // Reset the scale
+    cairo_scale(cr, 1.0/scale_x, 1.0/scale_y);
+    
     return FALSE;
 }
 
