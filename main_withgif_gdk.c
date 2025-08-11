@@ -356,7 +356,6 @@ void shift_tokens(const char *new_token) {
 
 // ---------- On new token: spawn image generator thread ----------
 gboolean update_ui_from_serial(gpointer user_data) {
-    refocus_main_window(window);
     pthread_t image_thread;
     pthread_create(&image_thread, NULL, image_generator_thread, NULL);
     pthread_detach(image_thread);
