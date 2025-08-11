@@ -1,4 +1,4 @@
-// Modified: clears GIF animation before destroying window and ensures destruction happens on GTK main thread.
+// Modified: keeps GIF until next token; safe destroy on main thread; Liberation Sans fonts used.
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
@@ -29,7 +29,11 @@ char current_token[32]   = "--";
 char previous_token[32]  = "--";
 char preceding_token[32] = "--";
 
-// ---------- Safe destroy (unused for GIF) ----------
+// Forward declarations
+gboolean update_ui_from_serial(gpointer user_data);
+gboolean destroy_gif_window(gpointer data);
+
+// ---------- Safe destroy (kept for compatibility) ----------
 gboolean safe_destroy_window(gpointer data) {
     GtkWidget *win = GTK_WIDGET(data);
     if (GTK_IS_WIDGET(win)) {
@@ -45,7 +49,6 @@ gboolean destroy_gif_window(gpointer data) {
         // If we have a gif_image, clear it to stop internal animation timers
         if (gif_image && GTK_IS_IMAGE(gif_image)) {
             gtk_image_clear(GTK_IMAGE(gif_image)); // removes any animation/pixbuf from the GtkImage
-            // Note: gtk_image_clear will stop GTK's internal animation usage of the pixbuf
         } else {
             // if gif_image isn't set, try to find a child image in gif_window (defensive)
             if (GTK_IS_WINDOW(gif_window)) {
@@ -66,15 +69,18 @@ gboolean destroy_gif_window(gpointer data) {
 
 // Keypress handler for GIF window (runs on main thread)
 gboolean on_gif_keypress(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
-    // schedule safe destroy on main loop (or just call directly; we're already on main thread)
+    // Close gif safely
     destroy_gif_window(NULL);
     // Request a UI refresh of tokens
-    g_idle_add((GSourceFunc)/*function*/ (gpointer) (GSourceFunc) gtk_widget_queue_draw, NULL);
+    g_idle_add(update_ui_from_serial, NULL);
     return TRUE;
 }
 
 // Helper to schedule a token UI refresh (wrap update_ui_from_serial)
-gboolean schedule_update_ui_from_serial(gpointer data);
+gboolean schedule_update_ui_from_serial(gpointer data) {
+    g_idle_add(update_ui_from_serial, NULL);
+    return G_SOURCE_REMOVE;
+}
 
 // ---------- Show Fullscreen GIF ----------
 gboolean show_fullscreen_gif(gpointer filename_ptr) {
@@ -84,7 +90,7 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     if (gif_window) {
         // schedule destruction of previous GIF first
         g_idle_add(destroy_gif_window, NULL);
-        // we let that run; continue to create new one below
+        // continue to create new one below
     }
 
     // Create new fullscreen window
@@ -130,8 +136,7 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     gtk_container_add(GTK_CONTAINER(gif_window), gif_image);
     gtk_widget_show_all(gif_window);
 
-    // Optional: auto-close after N seconds if you want a fallback
-    // g_timeout_add_seconds(5, destroy_gif_window, NULL);
+    // NOTE: No auto-close here. GIF will remain until next token or keypress.
 
     return FALSE;
 }
@@ -180,20 +185,20 @@ gboolean refresh_images_on_ui(gpointer user_data) {
 
 // ---------- Thread: Generate images then refresh UI ----------
 void *image_generator_thread(void *arg) {
-generate_token_image(current_image, current_token, "Current Draw", "current.png", "peachpuff", "red",
-                     0.78, 0.18, 0.1, -0.07, 0.05, 0.41,
-                     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 
-                     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf");
+    generate_token_image(current_image, current_token, "Current Draw", "current.png", "peachpuff", "red",
+                         0.78, 0.18, 0.1, -0.07, 0.05, 0.41,
+                         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf");
 
-generate_token_image(previous_image, previous_token, "Previous Draw", "previous.png", "peachpuff", "blue",
-                     0.70, 0.10, -0.04, -0.03, -0.06, 0.30,
-                     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 
-                     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf");
+    generate_token_image(previous_image, previous_token, "Previous Draw", "previous.png", "peachpuff", "blue",
+                         0.70, 0.10, -0.04, -0.03, -0.06, 0.30,
+                         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf");
 
-generate_token_image(preceding_image, preceding_token, "Preceding Draw", "preceding.png", "peachpuff", "brown",
-                     0.92, 0.17, -0.08, -0.1, -0.05, 0.35,
-                     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 
-                     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf");
+    generate_token_image(preceding_image, preceding_token, "Preceding Draw", "preceding.png", "peachpuff", "brown",
+                         0.92, 0.17, -0.08, -0.1, -0.05, 0.35,
+                         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf");
 
     g_idle_add(refresh_images_on_ui, NULL);
     return NULL;
@@ -278,12 +283,6 @@ gboolean update_ui_from_serial(gpointer user_data) {
     return FALSE;
 }
 
-// wrapper to schedule update_ui_from_serial easily from destroy callback
-gboolean schedule_update_ui_from_serial(gpointer data) {
-    g_idle_add(update_ui_from_serial, NULL);
-    return G_SOURCE_REMOVE;
-}
-
 // ---------- Serial Reading Thread ----------
 void *serial_reader_thread(void *arg) {
     const char *serial_port = "/dev/serial0";
@@ -320,17 +319,13 @@ void *serial_reader_thread(void *arg) {
             if (strcmp(token, "C1") == 0) {
                 // schedule showing GIF on main thread
                 g_idle_add(show_fullscreen_gif, "congratulations1.gif");
-                // Also schedule an auto restore after 5s in case no tokens come
-                g_timeout_add_seconds(5, schedule_update_ui_from_serial, NULL);
-                // optionally also schedule gif destruction after 5s
-                g_timeout_add_seconds(5, destroy_gif_window, NULL);
+                // DO NOT auto-close here; wait for next token to close GIF
             } else if (strcmp(token, "G1") == 0) {
                 g_idle_add(show_fullscreen_gif, "gameover1.gif");
                 strcpy(current_token, "--");
                 strcpy(previous_token, "--");
                 strcpy(preceding_token, "--");
-                g_timeout_add_seconds(5, schedule_update_ui_from_serial, NULL);
-                g_timeout_add_seconds(5, destroy_gif_window, NULL);
+                // DO NOT auto-close here
             } else {
                 // If a normal token arrives, we want to close GIF (if any) and update UI.
                 // Schedule the gif window destruction on main thread (safe)
