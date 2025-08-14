@@ -42,7 +42,7 @@ char preceding_token[32] = "--";
 // ===================== Helpers =====================
 
 // Keep window on top without bouncing geometry
-void refocus_main_window(GtkWidget *win) {
+static void refocus_main_window(GtkWidget *win) {
     if (win && GTK_IS_WINDOW(win)) {
         gtk_window_present(GTK_WINDOW(win));
         if (gtk_widget_get_window(win)) {
@@ -128,7 +128,7 @@ static void gif_player_cleanup(void) {
 }
 
 // ---------- Show GIF in overlay (reuses name used by your serial thread) ----------
-gboolean show_fullscreen_gif(gpointer filename_ptr) {
+static gboolean show_fullscreen_gif(gpointer filename_ptr) {
     const char *filename = (const char *)filename_ptr;
     if (!gif_area) return FALSE;
 
@@ -144,7 +144,7 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
     } else {
         gif_player = g_new0(GifPlayer, 1);
         gif_player->drawing_area = gif_area;
-        // connect draw ONCE (we connect here safely the first time)
+        // connect draw ONCE (safe to connect on first use)
         g_signal_connect(gif_area, "draw", G_CALLBACK(gif_player_draw), NULL);
     }
 
@@ -172,7 +172,7 @@ gboolean show_fullscreen_gif(gpointer filename_ptr) {
 }
 
 // ---------- Hide GIF overlay ----------
-gboolean hide_overlay_gif(gpointer user_data) {
+static gboolean hide_overlay_gif(gpointer user_data) {
     if (gif_area) gtk_widget_set_visible(gif_area, FALSE);
     gif_player_cleanup();
     refocus_main_window(window);
@@ -180,7 +180,7 @@ gboolean hide_overlay_gif(gpointer user_data) {
 }
 
 // ===================== Token Images =====================
-void generate_token_image(GtkWidget *widget, const char *number, const char *label,
+static void generate_token_image(GtkWidget *widget, const char *number, const char *label,
                           const char *filename, const char *bg, const char *fg,
                           float number_size_percent, float label_size_percent,
                           float number_x_offset_percent, float number_y_offset_percent,
@@ -213,14 +213,14 @@ void generate_token_image(GtkWidget *widget, const char *number, const char *lab
     system(command);
 }
 
-gboolean refresh_images_on_ui(gpointer user_data) {
+static gboolean refresh_images_on_ui(gpointer user_data) {
     gtk_image_set_from_file(GTK_IMAGE(current_image), "current.png");
     gtk_image_set_from_file(GTK_IMAGE(previous_image), "previous.png");
     gtk_image_set_from_file(GTK_IMAGE(preceding_image), "preceding.png");
     return FALSE;
 }
 
-void *image_generator_thread(void *arg) {
+static void *image_generator_thread(void *arg) {
     generate_token_image(current_image, current_token, "Current Draw", "current.png", "peachpuff", "red",
                          0.78, 0.18, 0.1, -0.07, 0.05, 0.41,
                          "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -239,7 +239,7 @@ void *image_generator_thread(void *arg) {
 }
 
 // ===================== Ticker =====================
-gboolean animate_ticker(gpointer data) {
+static gboolean animate_ticker(gpointer data) {
     ticker_x -= 2;
     if (ticker_x + ticker_width < 0)
         ticker_x = ticker_area_width;
@@ -247,7 +247,7 @@ gboolean animate_ticker(gpointer data) {
     return G_SOURCE_CONTINUE;
 }
 
-gboolean finalize_ticker_setup(gpointer data) {
+static gboolean finalize_ticker_setup(gpointer data) {
     ticker_width = gtk_widget_get_allocated_width(ticker_label);
     ticker_area_width = gtk_widget_get_allocated_width(ticker_fixed);
 
@@ -260,7 +260,7 @@ gboolean finalize_ticker_setup(gpointer data) {
 }
 
 // ===================== Layout sizing =====================
-gboolean set_paned_ratios(gpointer user_data) {
+static gboolean set_paned_ratios(gpointer user_data) {
     gtk_paned_set_wide_handle(GTK_PANED(top_pane), FALSE);
     gtk_paned_set_wide_handle(GTK_PANED(outermost), FALSE);
     gtk_paned_set_wide_handle(GTK_PANED(outer), FALSE);
@@ -273,7 +273,7 @@ gboolean set_paned_ratios(gpointer user_data) {
     gtk_widget_get_allocation(inner, &inner_alloc);
 
     gtk_paned_set_position(GTK_PANED(top_pane), top_alloc.height * 0.08);
-    gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.92);
+    gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.85);
     gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.72);
     gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.70);
 
@@ -303,13 +303,13 @@ gboolean set_paned_ratios(gpointer user_data) {
 }
 
 // ===================== Tokens =====================
-void shift_tokens(const char *new_token) {
+static void shift_tokens(const char *new_token) {
     strncpy(preceding_token, previous_token, sizeof(preceding_token));
     strncpy(previous_token, current_token, sizeof(previous_token));
     strncpy(current_token, new_token, sizeof(current_token));
 }
 
-gboolean update_ui_from_serial(gpointer user_data) {
+static gboolean update_ui_from_serial(gpointer user_data) {
     pthread_t image_thread;
     pthread_create(&image_thread, NULL, image_generator_thread, NULL);
     pthread_detach(image_thread);
@@ -317,7 +317,7 @@ gboolean update_ui_from_serial(gpointer user_data) {
 }
 
 // ===================== Serial Thread =====================
-void *serial_reader_thread(void *arg) {
+static void *serial_reader_thread(void *arg) {
     const char *serial_port = "/dev/serial0";
     int fd = open(serial_port, O_RDWR | O_NOCTTY | O_NDELAY);
     if (fd == -1) {
@@ -373,7 +373,7 @@ void *serial_reader_thread(void *arg) {
 }
 
 // ===================== Cleanup =====================
-void cleanup_images(void) {
+static void cleanup_images(void) {
     remove("current.png");
     remove("previous.png");
     remove("preceding.png");
@@ -384,7 +384,8 @@ void cleanup_images(void) {
 int main(int argc, char *argv[]) {
     gtk_init(&argc, &argv);
 
-    GtkBuilder *builder = gtk_builder_new_from_file("interface_paned_overlay.glade");
+    // NOTE: this expects your updated Glade with GtkOverlay + drawing area id="gif_area"
+    GtkBuilder *builder = gtk_builder_new_from_file("interface_paned_overlay1.glade");
     window         = GTK_WIDGET(gtk_builder_get_object(builder, "main"));
 
     top_label      = GTK_WIDGET(gtk_builder_get_object(builder, "top_label"));
@@ -406,6 +407,11 @@ int main(int argc, char *argv[]) {
         g_printerr("Error: Missing widgets from Glade (check gif_area exists).\n");
         return 1;
     }
+
+    // Ensure overlay DA covers whole window & can be drawn on
+    gtk_widget_set_app_paintable(gif_area, TRUE);
+    gtk_widget_set_hexpand(gif_area, TRUE);
+    gtk_widget_set_vexpand(gif_area, TRUE);
 
     // Fullscreen & styling
     gtk_window_fullscreen(GTK_WINDOW(window));
