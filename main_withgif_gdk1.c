@@ -385,7 +385,7 @@ int main(int argc, char *argv[]) {
     gtk_init(&argc, &argv);
 
     // NOTE: this expects your updated Glade with GtkOverlay + drawing area id="gif_area"
-    GtkBuilder *builder = gtk_builder_new_from_file("interface_paned_overlay1.glade");
+    GtkBuilder *builder = gtk_builder_new_from_file("interface_paned_overlay.glade");
     window         = GTK_WIDGET(gtk_builder_get_object(builder, "main"));
 
     top_label      = GTK_WIDGET(gtk_builder_get_object(builder, "top_label"));
