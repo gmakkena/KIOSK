@@ -1,5 +1,4 @@
 #include <gtk/gtk.h>
-#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,16 +7,20 @@
 #include <unistd.h>
 #include <termios.h>
 #include <signal.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 
-// ===================== Widgets =====================
-GtkWidget *window;
+// Widgets
+GtkWidget *window; // main window is now global
 GtkWidget *top_label;
 GtkWidget *current_image, *previous_image, *preceding_image;
 GtkWidget *top_pane, *outermost, *outer, *inner;
-GtkWidget *ticker_fixed, *ticker_label, *ticker_label2;
-GtkWidget *gif_area = NULL;
+GtkWidget *ticker_fixed, *ticker_label;
 
-// ===================== GIF Player =====================
+// --- NEW: Overlay for GIF inside the same window ---
+GtkWidget *root_overlay = NULL; // GtkOverlay container
+GtkWidget *gif_overlay  = NULL; // GtkDrawingArea used to paint the GIF
+
+// For fullscreen GIF scaling:
 typedef struct {
     GdkPixbufAnimation *animation;
     GdkPixbufAnimationIter *iter;
@@ -25,37 +28,45 @@ typedef struct {
     GtkWidget *drawing_area;
     GTimer *timer;
 } GifPlayer;
-
 static GifPlayer *gif_player = NULL;
 
-// ===================== Ticker =====================
+// Ticker
 int ticker_x = 0, ticker_width = 0, ticker_area_width = 0;
 guint ticker_timer_id = 0;
 
-// ===================== Tokens =====================
+// Tokens
 char current_token[32]   = "--";
 char previous_token[32]  = "--";
 char preceding_token[32] = "--";
 
-// ===================== Helpers =====================
-void refocus_main_window(GtkWidget *win) {
-    if (win && GTK_IS_WINDOW(win)) {
-        gtk_window_present(GTK_WINDOW(win));
-        if (gtk_widget_get_window(win)) {
-            gdk_window_raise(gtk_widget_get_window(win));
-        }
+gboolean safe_destroy_window(gpointer data) {
+    GtkWidget *win = GTK_WIDGET(data);
+    if (GTK_IS_WIDGET(win)) {
+        gtk_widget_destroy(win);
+    }
+    return G_SOURCE_REMOVE;
+}
+
+// Refocus and reset the main window to fullscreen and present
+void refocus_main_window(GtkWidget *window) {
+    if (window && GTK_IS_WINDOW(window)) {
+        gtk_window_unfullscreen(GTK_WINDOW(window));
+        gtk_window_move(GTK_WINDOW(window), 0, 0);
+        gtk_window_fullscreen(GTK_WINDOW(window));
+        gtk_window_present(GTK_WINDOW(window));
     }
 }
 
-// --- GIF timing advance ---
+// --- [REMOVED] on_gif_window_hide: not needed when using overlay ---
+
+// --- GIF Fullscreen Scaling Helper Functions ---
 static gboolean gif_player_advance(gpointer data) {
     if (!gif_player || !gif_player->iter) return G_SOURCE_REMOVE;
 
-    gdouble elapsed_ms = g_timer_elapsed(gif_player->timer, NULL) * 1000.0;
+    gdouble elapsed = g_timer_elapsed(gif_player->timer, NULL) * 1000.0; // ms
     int delay = gdk_pixbuf_animation_iter_get_delay_time(gif_player->iter);
-    if (delay < 0) delay = 100;
 
-    if (elapsed_ms >= delay) {
+    if (elapsed >= delay) {
         gdk_pixbuf_animation_iter_advance(gif_player->iter, NULL);
         gtk_widget_queue_draw(gif_player->drawing_area);
         g_timer_start(gif_player->timer);
@@ -63,27 +74,32 @@ static gboolean gif_player_advance(gpointer data) {
     return G_SOURCE_CONTINUE;
 }
 
-// --- GIF draw ---
 static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
-    if (!gif_player || !gif_player->iter) return FALSE;
+    if (!gif_player || !gif_player->iter)
+        return FALSE;
 
     GdkPixbuf *frame = gdk_pixbuf_animation_iter_get_pixbuf(gif_player->iter);
-    if (!frame) return FALSE;
+    if (!frame || !GDK_IS_PIXBUF(frame))
+        return FALSE;
 
-    int da_w = gtk_widget_get_allocated_width(widget);
-    int da_h = gtk_widget_get_allocated_height(widget);
-    if (da_w < 1 || da_h < 1) return FALSE;
+    int da_width = gtk_widget_get_allocated_width(widget);
+    int da_height = gtk_widget_get_allocated_height(widget);
+    if (da_width < 1 || da_height < 1)
+        return FALSE;
 
-    int fw = gdk_pixbuf_get_width(frame);
-    int fh = gdk_pixbuf_get_height(frame);
-    if (fw <= 0 || fh <= 0) return FALSE;
+    int orig_width = gdk_pixbuf_get_width(frame);
+    int orig_height = gdk_pixbuf_get_height(frame);
+    if (orig_height <= 0 || orig_width <= 0)
+        return FALSE;
 
+    // Fit to height, maintain aspect ratio
+    double scale = (double)da_height / orig_height;
+    int scaled_width = (int)(orig_width * scale);
+    int x_offset = (da_width - scaled_width) / 2;
+
+    // Black out background (overlay)
     cairo_set_source_rgb(cr, 0, 0, 0);
     cairo_paint(cr);
-
-    double scale = (double)da_h / (double)fh;
-    int scaled_w = (int)(fw * scale);
-    int x_offset = (da_w - scaled_w) / 2;
 
     cairo_save(cr);
     cairo_translate(cr, x_offset, 0);
@@ -95,59 +111,118 @@ static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
     return FALSE;
 }
 
-static void gif_player_cleanup(void) {
-    if (!gif_player) return;
-
-    if (gif_player->timeout_id) {
-        g_source_remove(gif_player->timeout_id);
-        gif_player->timeout_id = 0;
+static void gif_player_cleanup() {
+    if (gif_player) {
+        if (gif_player->timeout_id) {
+            g_source_remove(gif_player->timeout_id);
+            gif_player->timeout_id = 0;
+        }
+        if (gif_player->animation) {
+            g_object_unref(gif_player->animation);
+            gif_player->animation = NULL;
+        }
+        if (gif_player->iter) {
+            g_object_unref(gif_player->iter);
+            gif_player->iter = NULL;
+        }
+        if (gif_player->timer) {
+            g_timer_destroy(gif_player->timer);
+            gif_player->timer = NULL;
+        }
+        g_free(gif_player);
+        gif_player = NULL;
     }
-    if (gif_player->animation) g_object_unref(gif_player->animation);
-    if (gif_player->iter) g_object_unref(gif_player->iter);
-    if (gif_player->timer) g_timer_destroy(gif_player->timer);
-    g_free(gif_player);
-    gif_player = NULL;
+    // Hide overlay when cleaned up
+    if (gif_overlay) {
+        gtk_widget_hide(gif_overlay);
+    }
 }
 
+// --- NEW: helpers to hide overlay from other threads via g_idle_add ---
+static gboolean hide_gif_overlay(gpointer data) {
+    if (gif_overlay) gtk_widget_hide(gif_overlay);
+    return FALSE;
+}
+static gboolean on_gif_overlay_key(GtkWidget *w, GdkEventKey *e, gpointer d) {
+    // Any key press hides overlay
+    if (gif_overlay) gtk_widget_hide(gif_overlay);
+    return TRUE;
+}
+static gboolean on_gif_overlay_button(GtkWidget *w, GdkEventButton *e, gpointer d) {
+    // Any mouse/touch click hides overlay
+    if (gif_overlay) gtk_widget_hide(gif_overlay);
+    return TRUE;
+}
+
+// ---------- Show GIF in overlay (replaces separate window) ----------
 gboolean show_fullscreen_gif(gpointer filename_ptr) {
     const char *filename = (const char *)filename_ptr;
-    if (!gif_area) return FALSE;
 
-    if (gif_player) gif_player_cleanup();
+    // Ensure overlay/drawing area exists
+    if (!gif_overlay) return FALSE;
 
-    gif_player = g_new0(GifPlayer, 1);
-    gif_player->drawing_area = gif_area;
-    g_signal_connect(gif_area, "draw", G_CALLBACK(gif_player_draw), NULL);
+    // If player already exists, just update the animation
+    if (gif_player) {
+        if (gif_player->timeout_id) {
+            g_source_remove(gif_player->timeout_id);
+            gif_player->timeout_id = 0;
+        }
+        if (gif_player->iter) {
+            g_object_unref(gif_player->iter);
+            gif_player->iter = NULL;
+        }
+        if (gif_player->animation) {
+            g_object_unref(gif_player->animation);
+            gif_player->animation = NULL;
+        }
 
-    GError *error = NULL;
-    gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
-    if (error || !gif_player->animation) {
-        g_printerr("GIF Error loading %s: %s\n", filename, error ? error->message : "Invalid animation");
-        if (error) g_error_free(error);
-        gif_player_cleanup();
+        GError *error = NULL;
+        gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
+        if (error || !gif_player->animation || !GDK_IS_PIXBUF_ANIMATION(gif_player->animation)) {
+            g_printerr("GIF Error loading %s: %s\n", filename, error ? error->message : "Invalid animation");
+            if (error) g_error_free(error);
+            return FALSE;
+        }
+        gif_player->iter = gdk_pixbuf_animation_get_iter(gif_player->animation, NULL);
+        g_timer_start(gif_player->timer);
+        gif_player->timeout_id = g_timeout_add(10, gif_player_advance, NULL);
+
+        gtk_widget_show(gif_overlay);
+        gtk_widget_queue_draw(gif_overlay);
+        gtk_widget_grab_focus(gif_overlay);
         return FALSE;
     }
 
+    // Create the player and hook to overlay drawing area
+    gif_player = g_new0(GifPlayer, 1);
+
+    GError *error = NULL;
+    gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
+    if (error) {
+        g_printerr("GIF Error: %s\n", error->message);
+        g_error_free(error);
+        g_free(gif_player);
+        gif_player = NULL;
+        return FALSE;
+    }
     gif_player->iter = gdk_pixbuf_animation_get_iter(gif_player->animation, NULL);
     gif_player->timer = g_timer_new();
-    g_timer_start(gif_player->timer);
 
-    gtk_widget_set_visible(gif_area, TRUE);
-    gtk_widget_queue_draw(gif_area);
+    gif_player->drawing_area = gif_overlay;
+
+    // Connect draw only once (safe to connect multiple times but we guard by creating once)
+    g_signal_connect(gif_overlay, "draw", G_CALLBACK(gif_player_draw), NULL);
+
+    gtk_widget_show(gif_overlay);
+    gtk_widget_queue_draw(gif_overlay);
+    gtk_widget_grab_focus(gif_overlay);
+
     gif_player->timeout_id = g_timeout_add(10, gif_player_advance, NULL);
 
-    refocus_main_window(window);
     return FALSE;
 }
 
-gboolean hide_overlay_gif(gpointer user_data) {
-    if (gif_area) gtk_widget_set_visible(gif_area, FALSE);
-    gif_player_cleanup();
-    refocus_main_window(window);
-    return FALSE;
-}
-
-// ===================== Token Images =====================
+// ---------- Generate Token Image ----------
 void generate_token_image(GtkWidget *widget, const char *number, const char *label,
                           const char *filename, const char *bg, const char *fg,
                           float number_size_percent, float label_size_percent,
@@ -181,6 +256,7 @@ void generate_token_image(GtkWidget *widget, const char *number, const char *lab
     system(command);
 }
 
+// ---------- Refresh Images on UI ----------
 gboolean refresh_images_on_ui(gpointer user_data) {
     gtk_image_set_from_file(GTK_IMAGE(current_image), "current.png");
     gtk_image_set_from_file(GTK_IMAGE(previous_image), "previous.png");
@@ -188,6 +264,7 @@ gboolean refresh_images_on_ui(gpointer user_data) {
     return FALSE;
 }
 
+// ---------- Thread: Generate images then refresh UI ----------
 void *image_generator_thread(void *arg) {
     generate_token_image(current_image, current_token, "Current Draw", "current.png", "peachpuff", "red",
                          0.78, 0.18, 0.1, -0.07, 0.05, 0.41,
@@ -206,14 +283,12 @@ void *image_generator_thread(void *arg) {
     return NULL;
 }
 
-// ===================== Seamless Ticker =====================
+// ---------- Animate Ticker ----------
 gboolean animate_ticker(gpointer data) {
     ticker_x -= 2;
-    if (ticker_x <= -ticker_width) {
-        ticker_x += ticker_width;
-    }
+    if (ticker_x + ticker_width < 0)
+        ticker_x = ticker_area_width;
     gtk_fixed_move(GTK_FIXED(ticker_fixed), ticker_label, ticker_x, 0);
-    gtk_fixed_move(GTK_FIXED(ticker_fixed), ticker_label2, ticker_x + ticker_width, 0);
     return G_SOURCE_CONTINUE;
 }
 
@@ -224,12 +299,12 @@ gboolean finalize_ticker_setup(gpointer data) {
     if (ticker_width <= 1 || ticker_area_width <= 1)
         return G_SOURCE_CONTINUE;
 
-    ticker_x = 0;
+    ticker_x = ticker_area_width;
     ticker_timer_id = g_timeout_add(30, animate_ticker, NULL);
     return G_SOURCE_REMOVE;
 }
 
-// ===================== Layout sizing =====================
+// ---------- Set Pane Ratios ----------
 gboolean set_paned_ratios(gpointer user_data) {
     gtk_paned_set_wide_handle(GTK_PANED(top_pane), FALSE);
     gtk_paned_set_wide_handle(GTK_PANED(outermost), FALSE);
@@ -263,7 +338,6 @@ gboolean set_paned_ratios(gpointer user_data) {
         "<span font_family='Arial' weight='bold' size='%d' foreground='#2F4F4F'>Aurum Smart Tech</span>",
         ticker_font_size);
     gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
-    gtk_label_set_markup(GTK_LABEL(ticker_label2), markup_ticker);
 
     pthread_t init_image_thread;
     pthread_create(&init_image_thread, NULL, image_generator_thread, NULL);
@@ -273,13 +347,14 @@ gboolean set_paned_ratios(gpointer user_data) {
     return G_SOURCE_REMOVE;
 }
 
-// ===================== Tokens =====================
+// ---------- Shift Token Queue ----------
 void shift_tokens(const char *new_token) {
     strncpy(preceding_token, previous_token, sizeof(preceding_token));
     strncpy(previous_token, current_token, sizeof(previous_token));
     strncpy(current_token, new_token, sizeof(current_token));
 }
 
+// ---------- On new token: spawn image generator thread ----------
 gboolean update_ui_from_serial(gpointer user_data) {
     pthread_t image_thread;
     pthread_create(&image_thread, NULL, image_generator_thread, NULL);
@@ -287,7 +362,7 @@ gboolean update_ui_from_serial(gpointer user_data) {
     return FALSE;
 }
 
-// ===================== Serial Thread =====================
+// ---------- Serial Reading Thread ----------
 void *serial_reader_thread(void *arg) {
     const char *serial_port = "/dev/serial0";
     int fd = open(serial_port, O_RDWR | O_NOCTTY | O_NDELAY);
@@ -324,12 +399,18 @@ void *serial_reader_thread(void *arg) {
                 g_idle_add(show_fullscreen_gif, "congratulations1.gif");
             } else if (strcmp(token, "G1") == 0) {
                 g_idle_add(show_fullscreen_gif, "gameover1.gif");
-                strcpy(current_token, "--");
-                strcpy(previous_token, "--");
-                strcpy(preceding_token, "--");
+                // Reset tokens safely
+                strncpy(current_token, "--", sizeof(current_token));
+                strncpy(previous_token, "--", sizeof(previous_token));
+                strncpy(preceding_token, "--", sizeof(preceding_token));
+
                 g_idle_add(update_ui_from_serial, NULL);
             } else {
-                g_idle_add(hide_overlay_gif, NULL);
+                // Hide overlay if showing
+                g_idle_add(hide_gif_overlay, NULL);
+                // Refocus and reposition the main window (no-op but harmless)
+                g_idle_add((GSourceFunc)refocus_main_window, window);
+
                 shift_tokens(token);
                 g_idle_add(update_ui_from_serial, NULL);
             }
@@ -341,7 +422,6 @@ void *serial_reader_thread(void *arg) {
     return NULL;
 }
 
-// ===================== Cleanup =====================
 void cleanup_images(void) {
     remove("current.png");
     remove("previous.png");
@@ -349,34 +429,56 @@ void cleanup_images(void) {
     gif_player_cleanup();
 }
 
-// ===================== main =====================
 int main(int argc, char *argv[]) {
     gtk_init(&argc, &argv);
 
-    GtkBuilder *builder = gtk_builder_new_from_file("interface_paned_overlay.glade");
-    window         = GTK_WIDGET(gtk_builder_get_object(builder, "main"));
+    GtkBuilder *builder = gtk_builder_new_from_file("interface_paned.glade");
+    window = GTK_WIDGET(gtk_builder_get_object(builder, "main"));
 
-    top_label      = GTK_WIDGET(gtk_builder_get_object(builder, "top_label"));
-    current_image  = GTK_WIDGET(gtk_builder_get_object(builder, "current_image"));
-    previous_image = GTK_WIDGET(gtk_builder_get_object(builder, "previous_image"));
-    preceding_image= GTK_WIDGET(gtk_builder_get_object(builder, "preceding_image"));
-    top_pane       = GTK_WIDGET(gtk_builder_get_object(builder, "top_pane"));
-    outermost      = GTK_WIDGET(gtk_builder_get_object(builder, "outermost"));
-    outer          = GTK_WIDGET(gtk_builder_get_object(builder, "outer"));
-    inner          = GTK_WIDGET(gtk_builder_get_object(builder, "inner"));
-    ticker_fixed   = GTK_WIDGET(gtk_builder_get_object(builder, "ticker_fixed"));
-    ticker_label   = GTK_WIDGET(gtk_builder_get_object(builder, "ticker_label"));
-    gif_area       = GTK_WIDGET(gtk_builder_get_object(builder, "gif_area"));
+    top_label       = GTK_WIDGET(gtk_builder_get_object(builder, "top_label"));
+    current_image   = GTK_WIDGET(gtk_builder_get_object(builder, "current_image"));
+    previous_image  = GTK_WIDGET(gtk_builder_get_object(builder, "previous_image"));
+    preceding_image = GTK_WIDGET(gtk_builder_get_object(builder, "preceding_image"));
+    top_pane        = GTK_WIDGET(gtk_builder_get_object(builder, "top_pane"));
+    outermost       = GTK_WIDGET(gtk_builder_get_object(builder, "outermost"));
+    outer           = GTK_WIDGET(gtk_builder_get_object(builder, "outer"));
+    inner           = GTK_WIDGET(gtk_builder_get_object(builder, "inner"));
+    ticker_fixed    = GTK_WIDGET(gtk_builder_get_object(builder, "ticker_fixed"));
+    ticker_label    = GTK_WIDGET(gtk_builder_get_object(builder, "ticker_label"));
 
     if (!window || !top_label || !current_image || !previous_image || !preceding_image ||
-        !top_pane || !outermost || !outer || !inner || !ticker_fixed || !ticker_label || !gif_area) {
+        !top_pane || !outermost || !outer || !inner || !ticker_fixed || !ticker_label) {
         g_printerr("Error: Missing widgets from Glade.\n");
         return 1;
     }
 
-    // Create ticker_label2 for seamless scrolling
-    ticker_label2 = gtk_label_new(NULL);
-    gtk_fixed_put(GTK_FIXED(ticker_fixed), ticker_label2, 0, 0);
+    // --- NEW: Wrap existing UI in a GtkOverlay programmatically ---
+    GtkWidget *main_child = gtk_bin_get_child(GTK_BIN(window)); // window is GtkWindow (GtkBin)
+    if (main_child) {
+        g_object_ref(main_child);
+        gtk_container_remove(GTK_CONTAINER(window), main_child);
+
+        root_overlay = gtk_overlay_new();
+        gtk_container_add(GTK_CONTAINER(window), root_overlay);
+        gtk_container_add(GTK_CONTAINER(root_overlay), main_child);
+
+        // Create the GIF drawing area overlay
+        gif_overlay = gtk_drawing_area_new();
+        gtk_widget_set_app_paintable(gif_overlay, TRUE);
+        gtk_widget_set_hexpand(gif_overlay, TRUE);
+        gtk_widget_set_vexpand(gif_overlay, TRUE);
+        gtk_widget_set_visible(gif_overlay, FALSE); // hidden by default
+        gtk_overlay_add_overlay(GTK_OVERLAY(root_overlay), gif_overlay);
+
+        // Optional: allow dismissing overlay via key/click
+        gtk_widget_add_events(gif_overlay, GDK_BUTTON_PRESS_MASK | GDK_KEY_PRESS_MASK);
+        gtk_widget_set_can_focus(gif_overlay, TRUE);
+        g_signal_connect(gif_overlay, "key-press-event", G_CALLBACK(on_gif_overlay_key), NULL);
+        g_signal_connect(gif_overlay, "button-press-event", G_CALLBACK(on_gif_overlay_button), NULL);
+    } else {
+        g_printerr("Error: main window has no child to wrap in overlay.\n");
+        return 1;
+    }
 
     gtk_window_fullscreen(GTK_WINDOW(window));
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
@@ -393,13 +495,13 @@ int main(int argc, char *argv[]) {
     g_signal_connect(window, "destroy", G_CALLBACK(cleanup_images), NULL);
 
     gtk_widget_show_all(window);
-    gtk_widget_set_visible(gif_area, FALSE);
     refocus_main_window(window);
 
     strcpy(current_token, "--");
     strcpy(previous_token, "--");
     strcpy(preceding_token, "--");
-
+    g_timeout_add(100, (GSourceFunc)update_ui_from_serial, NULL);
+    g_timeout_add(1000, (GSourceFunc)animate_ticker, NULL);
     pthread_t serial_thread;
     pthread_create(&serial_thread, NULL, serial_reader_thread, NULL);
     pthread_detach(serial_thread);
