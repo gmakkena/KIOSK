@@ -385,10 +385,9 @@ static void *serial_reader_thread(void *arg) {
                     if (field0 && field0[0] == ':') {
                         if (field1 && field2) {
                             if (strcmp(field1, "1") == 0) {
-                                // display number (ASCII) on LED => update current_token and refresh UI
-                                strncpy(current_token, field2, sizeof(current_token)-1);
-                                current_token[sizeof(current_token)-1] = '\0';
-                                g_idle_add(update_ui_from_serial, NULL);
+                                 // :00 1 12 -> treat as a NEW draw: shift tokens (preserve history)
+                                    shift_tokens(field2);                    // previous <- current, preceding <- previous, current <- field2
+                                    g_idle_add(update_ui_from_serial, NULL);
                             } else if (strcmp(field1, "3") == 0) {
                                 // initialise displays (start rolling) -> show a rolling GIF overlay
                                 // ensure rolling.gif exists in working dir (or change name/path)
