@@ -1,4 +1,3 @@
-// aurum_display.c
 #include <gtk/gtk.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <stdlib.h>
@@ -9,7 +8,6 @@
 #include <unistd.h>
 #include <termios.h>
 #include <signal.h>
-#include <errno.h>
 
 // ===================== Widgets =====================
 GtkWidget *window; // main window is now global
@@ -40,9 +38,6 @@ guint ticker_timer_id = 0;
 char current_token[32]   = "--";
 char previous_token[32]  = "--";
 char preceding_token[32] = "--";
-
-static gboolean app_running = TRUE;
-static GMutex token_mutex;
 
 // ===================== Helpers =====================
 
@@ -133,13 +128,9 @@ static void gif_player_cleanup(void) {
 }
 
 // ---------- Show GIF in overlay (reuses name used by your serial thread) ----------
-// NOTE: filename_ptr must be a strdup'd char* and will be freed here.
 static gboolean show_fullscreen_gif(gpointer filename_ptr) {
-    char *filename = (char *)filename_ptr;
-    if (!gif_area) {
-        g_free(filename);
-        return FALSE;
-    }
+    const char *filename = (const char *)filename_ptr;
+    if (!gif_area) return FALSE;
 
     // If already playing, stop timer & unref prev frames
     if (gif_player) {
@@ -163,7 +154,6 @@ static gboolean show_fullscreen_gif(gpointer filename_ptr) {
         g_printerr("GIF Error loading %s: %s\n", filename, error ? error->message : "Invalid animation");
         if (error) g_error_free(error);
         gif_player_cleanup();
-        g_free(filename);
         return FALSE;
     }
 
@@ -178,9 +168,6 @@ static gboolean show_fullscreen_gif(gpointer filename_ptr) {
 
     // Keep main window on top without geometry bounce
     refocus_main_window(window);
-
-    // free passed filename (we strdup'd before scheduling)
-    g_free(filename);
     return FALSE;
 }
 
@@ -234,27 +221,16 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
 }
 
 static void *image_generator_thread(void *arg) {
-    // Copy tokens under mutex to avoid races with serial thread
-    char tok_current[32], tok_previous[32], tok_preceding[32];
-    g_mutex_lock(&token_mutex);
-    strncpy(tok_current, current_token, sizeof(tok_current)-1);
-    tok_current[sizeof(tok_current)-1] = '\0';
-    strncpy(tok_previous, previous_token, sizeof(tok_previous)-1);
-    tok_previous[sizeof(tok_previous)-1] = '\0';
-    strncpy(tok_preceding, preceding_token, sizeof(tok_preceding)-1);
-    tok_preceding[sizeof(tok_preceding)-1] = '\0';
-    g_mutex_unlock(&token_mutex);
-
-    generate_token_image(current_image, tok_current, "Current Draw", "current.png", "peachpuff", "red",
+    generate_token_image(current_image, current_token, "Current Draw", "current.png", "peachpuff", "red",
                          0.78, 0.18, 0.1, -0.07, 0.05, 0.41,
                          "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
                          "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf");
 
-    generate_token_image(previous_image, tok_previous, "Previous Draw", "previous.png", "peachpuff", "blue",
+    generate_token_image(previous_image, previous_token, "Previous Draw", "previous.png", "peachpuff", "blue",
                          0.70, 0.10, -0.04, -0.03, -0.06, 0.30,
                          "Arial-Bold", "Arial");
 
-    generate_token_image(preceding_image, tok_preceding, "Preceding Draw", "preceding.png", "peachpuff", "brown",
+    generate_token_image(preceding_image, preceding_token, "Preceding Draw", "preceding.png", "peachpuff", "brown",
                          0.92, 0.17, -0.08, -0.1, -0.05, 0.35,
                          "Arial-Bold", "Arial");
 
@@ -279,7 +255,6 @@ static gboolean finalize_ticker_setup(gpointer data) {
         return G_SOURCE_CONTINUE;
 
     ticker_x = ticker_area_width;
-    if (ticker_timer_id) g_source_remove(ticker_timer_id);
     ticker_timer_id = g_timeout_add(30, animate_ticker, NULL);
     return G_SOURCE_REMOVE;
 }
@@ -297,29 +272,26 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_widget_get_allocation(outer, &outer_alloc);
     gtk_widget_get_allocation(inner, &inner_alloc);
 
-    gtk_paned_set_position(GTK_PANED(top_pane), (int)(top_alloc.height * 0.08));
-    gtk_paned_set_position(GTK_PANED(outermost), (int)(outermost_alloc.height * 0.85));
-    gtk_paned_set_position(GTK_PANED(outer), (int)(outer_alloc.width * 0.72));
-    gtk_paned_set_position(GTK_PANED(inner), (int)(inner_alloc.height * 0.70));
+    gtk_paned_set_position(GTK_PANED(top_pane), top_alloc.height * 0.08);
+    gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.85);
+    gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.72);
+    gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.70);
 
-    // compute point sizes (Pango expects points * PANGO_SCALE)
-    int top_font_points = (int)(outermost_alloc.height * 0.08 * 0.8);
-    int ticker_font_points = (int)(outermost_alloc.height * 0.045 * 0.9);
-    int top_pango_size = top_font_points * PANGO_SCALE;
-    int ticker_pango_size = ticker_font_points * PANGO_SCALE;
+    int top_font_size = (int)(outermost_alloc.height * 0.08 * 0.8 * PANGO_SCALE);
+    int ticker_font_size = (int)(outermost_alloc.height * 0.045 * 0.9 * PANGO_SCALE);
 
     gtk_widget_set_margin_top(top_pane, (int)(outermost_alloc.height * 0.02));
 
     char markup_top[256];
     snprintf(markup_top, sizeof(markup_top),
         "<span font_family='Fira Sans' weight='bold' size='%d' foreground='#8B0000'>Aurum Mega Event</span>",
-        top_pango_size);
+        top_font_size);
     gtk_label_set_markup(GTK_LABEL(top_label), markup_top);
 
     char markup_ticker[256];
     snprintf(markup_ticker, sizeof(markup_ticker),
         "<span font_family='Arial' weight='bold' size='%d' foreground='#2F4F4F'>Aurum Smart Tech</span>",
-        ticker_pango_size);
+        ticker_font_size);
     gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
 
     pthread_t init_image_thread;
@@ -332,14 +304,9 @@ static gboolean set_paned_ratios(gpointer user_data) {
 
 // ===================== Tokens =====================
 static void shift_tokens(const char *new_token) {
-    g_mutex_lock(&token_mutex);
-    strncpy(preceding_token, previous_token, sizeof(preceding_token)-1);
-    preceding_token[sizeof(preceding_token)-1] = '\0';
-    strncpy(previous_token, current_token, sizeof(previous_token)-1);
-    previous_token[sizeof(previous_token)-1] = '\0';
-    strncpy(current_token, new_token, sizeof(current_token)-1);
-    current_token[sizeof(current_token)-1] = '\0';
-    g_mutex_unlock(&token_mutex);
+    strncpy(preceding_token, previous_token, sizeof(preceding_token));
+    strncpy(previous_token, current_token, sizeof(previous_token));
+    strncpy(current_token, new_token, sizeof(current_token));
 }
 
 static gboolean update_ui_from_serial(gpointer user_data) {
@@ -349,63 +316,12 @@ static gboolean update_ui_from_serial(gpointer user_data) {
     return FALSE;
 }
 
-// ===================== Small GTK callbacks & helpers (free args) =====================
-
-// set_led_number: receives a strdup'd string with the number to display
-static gboolean set_led_number(gpointer number_ptr) {
-    char *num = (char *)number_ptr;
-    if (num) {
-        g_mutex_lock(&token_mutex);
-        // set current token to number (trim)
-        strncpy(current_token, num, sizeof(current_token)-1);
-        current_token[sizeof(current_token)-1] = '\0';
-        g_mutex_unlock(&token_mutex);
-
-        // regenerate images on UI thread
-        g_idle_add(update_ui_from_serial, NULL);
-        g_free(num);
-    }
-    return FALSE;
-}
-
-// init_led_rolling: receives strdup'd param (e.g. "6A") — here we just show a rolling GIF
-static gboolean init_led_rolling(gpointer param_ptr) {
-    char *param = (char *)param_ptr;
-    if (param) {
-        // you can parse param to control animation; for now we show rolling.gif
-        char *gif = g_strdup("rolling.gif");
-        g_idle_add(show_fullscreen_gif, gif); // gif will be freed inside show_fullscreen_gif
-        g_free(param);
-    }
-    return FALSE;
-}
-
-// small wrappers for $M types - they take NULL
-static gboolean show_tambola_main(gpointer unused) {
-    // TODO: update main screen UI elements — currently prints
-    g_print("Displaying Tambola main screen\n");
-    return FALSE;
-}
-static gboolean show_please_wait(gpointer unused) {
-    g_print("Please wait screen\n");
-    return FALSE;
-}
-static gboolean show_game_over(gpointer unused) {
-    // show game over gif
-    char *g = g_strdup("gameover1.gif");
-    g_idle_add(show_fullscreen_gif, g);
-    return FALSE;
-}
-static gboolean show_game_starting(gpointer unused) {
-    g_print("Game starting\n");
-    return FALSE;
-}
-
 // ===================== Serial Thread =====================
+// Replace your existing serial_reader_thread with this function:
+
 static void *serial_reader_thread(void *arg) {
-    const char *default_port = "/dev/serial0";
-    const char *serial_port = default_port;
-    int fd = open(serial_port, O_RDWR | O_NOCTTY | O_NONBLOCK);
+    const char *serial_port = "/dev/serial0";
+    int fd = open(serial_port, O_RDWR | O_NOCTTY | O_NDELAY);
     if (fd == -1) {
         perror("Unable to open serial port");
         return NULL;
@@ -428,8 +344,9 @@ static void *serial_reader_thread(void *arg) {
     options.c_iflag = IGNPAR;
     options.c_oflag = 0;
     options.c_lflag = 0;
+    // make reads non-blocking-ish (you used O_NDELAY)
     options.c_cc[VMIN] = 0;
-    options.c_cc[VTIME] = 1; // tenths of seconds
+    options.c_cc[VTIME] = 1; // 0.1s
     tcsetattr(fd, TCSANOW, &options);
     tcflush(fd, TCIFLUSH);
 
@@ -438,40 +355,50 @@ static void *serial_reader_thread(void *arg) {
     size_t linepos = 0;
     char rbuf[128];
 
-    while (app_running) {
+    while (1) {
         int n = read(fd, rbuf, sizeof(rbuf));
         if (n > 0) {
             for (int i = 0; i < n; ++i) {
                 char c = rbuf[i];
+
+                // treat CR or LF as end-of-line
                 if (c == '\r' || c == '\n') {
-                    if (linepos == 0) continue; // skip empty lines
+                    if (linepos == 0) {
+                        // skip empty line
+                        continue;
+                    }
+
+                    // terminate current line
                     linebuf[linepos] = '\0';
-                    // Process line
-                    // Trim leading spaces
+
+                    // trim leading spaces
                     char *p = linebuf;
                     while (*p == ' ') p++;
 
-                    // tokenize
+                    // Tokenize safely
                     char *saveptr = NULL;
-                    char *field0 = strtok_r(p, " ", &saveptr);
-                    char *field1 = strtok_r(NULL, " ", &saveptr);
-                    char *field2 = strtok_r(NULL, " ", &saveptr);
+                    char *field0 = strtok_r(p, " ", &saveptr); // e.g. ":00" or "$N" or arbitrary token
+                    char *field1 = strtok_r(NULL, " ", &saveptr); // e.g. "1" or "T1"
+                    char *field2 = strtok_r(NULL, " ", &saveptr); // param or number
 
+                    // 1) : commands e.g. ":00 1 12" or ":00 3 6A"
                     if (field0 && field0[0] == ':') {
-                        // format :xx cmd param
                         if (field1 && field2) {
                             if (strcmp(field1, "1") == 0) {
-                                // :00 1 12 -> display number 12
-                                char *num = g_strdup(field2);
-                                g_idle_add(set_led_number, num);
+                                // display number (ASCII) on LED => update current_token and refresh UI
+                                strncpy(current_token, field2, sizeof(current_token)-1);
+                                current_token[sizeof(current_token)-1] = '\0';
+                                g_idle_add(update_ui_from_serial, NULL);
                             } else if (strcmp(field1, "3") == 0) {
-                                // :00 3 6A -> initialise rolling displays
-                                char *pstr = g_strdup(field2);
-                                g_idle_add(init_led_rolling, pstr);
+                                // initialise displays (start rolling) -> show a rolling GIF overlay
+                                // ensure rolling.gif exists in working dir (or change name/path)
+                                g_idle_add(show_fullscreen_gif, (gpointer)"rolling.gif");
                             }
                         }
-                    } else if (field0 && strcmp(field0, "$N") == 0) {
-                        // $N cur prev pre
+                    }
+                    // 2) $N current previous preceding
+                    else if (field0 && strcmp(field0, "$N") == 0) {
+                        // parse three fields (if present) and set tokens
                         char tmp_cur[32] = "--", tmp_prev[32] = "--", tmp_pre[32] = "--";
                         if (field1) strncpy(tmp_cur, field1, sizeof(tmp_cur)-1);
                         char *f3 = strtok_r(NULL, " ", &saveptr);
@@ -479,49 +406,70 @@ static void *serial_reader_thread(void *arg) {
                         char *f4 = strtok_r(NULL, " ", &saveptr);
                         if (f4) strncpy(tmp_pre, f4, sizeof(tmp_pre)-1);
 
-                        g_mutex_lock(&token_mutex);
                         strncpy(current_token, tmp_cur, sizeof(current_token)-1);
                         current_token[sizeof(current_token)-1] = '\0';
                         strncpy(previous_token, tmp_prev, sizeof(previous_token)-1);
                         previous_token[sizeof(previous_token)-1] = '\0';
                         strncpy(preceding_token, tmp_pre, sizeof(preceding_token)-1);
                         preceding_token[sizeof(preceding_token)-1] = '\0';
-                        g_mutex_unlock(&token_mutex);
 
                         g_idle_add(update_ui_from_serial, NULL);
-                    } else if (field0 && strcmp(field0, "$M") == 0) {
+                    }
+                    // 3) $M messages: T1, P1, G1, GS, C1
+                    else if (field0 && strcmp(field0, "$M") == 0) {
                         if (field1) {
-                            if (strcmp(field1, "T1") == 0) g_idle_add(show_tambola_main, NULL);
-                            else if (strcmp(field1, "P1") == 0) g_idle_add(show_please_wait, NULL);
-                            else if (strcmp(field1, "G1") == 0) {
-                                g_idle_add(show_game_over, NULL);
-                                g_mutex_lock(&token_mutex);
-                                strcpy(current_token, "--"); strcpy(previous_token, "--"); strcpy(preceding_token, "--");
-                                g_mutex_unlock(&token_mutex);
+                            if (strcmp(field1, "T1") == 0) {
+                                // Tambola main screen
+                                // If you have a callback, call it; otherwise you can set top label or similar.
+                                // For now hide overlay and refresh UI main screen
+                                g_idle_add(hide_overlay_gif, NULL);
+                                // (If you have a dedicated function, call it here)
+                            } else if (strcmp(field1, "P1") == 0) {
+                                // Please wait
+                                g_idle_add(hide_overlay_gif, NULL);
+                                // optionally set a "please wait" UI state (not implemented)
+                            } else if (strcmp(field1, "G1") == 0) {
+                                // Game over: show gameover gif, reset tokens
+                                g_idle_add(show_fullscreen_gif, (gpointer)"gameover1.gif");
+                                strncpy(current_token, "--", sizeof(current_token));
+                                strncpy(previous_token, "--", sizeof(previous_token));
+                                strncpy(preceding_token, "--", sizeof(preceding_token));
                                 g_idle_add(update_ui_from_serial, NULL);
-                            } else if (strcmp(field1, "GS") == 0) g_idle_add(show_game_starting, NULL);
-                            else if (strcmp(field1, "C1") == 0) {
-                                char *g = g_strdup("congratulations1.gif");
-                                g_idle_add(show_fullscreen_gif, g);
+                            } else if (strcmp(field1, "GS") == 0) {
+                                // Game starting
+                                g_idle_add(hide_overlay_gif, NULL);
+                            } else if (strcmp(field1, "C1") == 0) {
+                                // Congratulations
+                                g_idle_add(show_fullscreen_gif, (gpointer)"congratulations1.gif");
                             }
                         }
-                    } else if (field0) {
-                        // fallback: treat first token as token to shift
+                    }
+                    // 4) fallback — treat first token as plain token (old behavior)
+                    else if (field0) {
                         g_idle_add(hide_overlay_gif, NULL);
                         shift_tokens(field0);
                         g_idle_add(update_ui_from_serial, NULL);
                     }
 
-                    linepos = 0; // reset
+                    // reset line buffer
+                    linepos = 0;
+                    linebuf[0] = '\0';
                 } else {
-                    if (linepos + 1 < LINEBUF_SIZE) linebuf[linepos++] = c;
-                    else linepos = 0; // overflow: discard
+                    // normal character: append if space remains
+                    if (linepos + 1 < LINEBUF_SIZE) {
+                        linebuf[linepos++] = c;
+                    } else {
+                        // overflow: discard buffer
+                        linepos = 0;
+                        linebuf[0] = '\0';
+                    }
                 }
-            }
+            } // end for
         } else if (n == 0) {
-            // no data right now
+            // no data available right now
             usleep(20000);
         } else {
+            // read error
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 usleep(20000);
                 continue;
@@ -530,7 +478,7 @@ static void *serial_reader_thread(void *arg) {
                 break;
             }
         }
-    }
+    } // end while
 
     close(fd);
     return NULL;
@@ -538,18 +486,10 @@ static void *serial_reader_thread(void *arg) {
 
 // ===================== Cleanup =====================
 static void cleanup_images(void) {
-    // stop gif and free
-    gif_player_cleanup();
-    // remove generated images (if they exist)
     remove("current.png");
     remove("previous.png");
     remove("preceding.png");
-}
-
-// called on window destroy to signal threads to stop
-static void on_app_destroy(GtkWidget *widget, gpointer data) {
-    app_running = FALSE;
-    // give threads a moment to exit; gtk_main_quit is connected separately
+    gif_player_cleanup();
 }
 
 // ===================== main =====================
@@ -558,12 +498,8 @@ int main(int argc, char *argv[]) {
 
     // NOTE: this expects your updated Glade with GtkOverlay + drawing area id="gif_area"
     GtkBuilder *builder = gtk_builder_new_from_file("interface_paned_overlay.glade");
-    if (!builder) {
-        g_printerr("Failed to load Glade file\n");
-        return 1;
-    }
-
     window         = GTK_WIDGET(gtk_builder_get_object(builder, "main"));
+
     top_label      = GTK_WIDGET(gtk_builder_get_object(builder, "top_label"));
     current_image  = GTK_WIDGET(gtk_builder_get_object(builder, "current_image"));
     previous_image = GTK_WIDGET(gtk_builder_get_object(builder, "previous_image"));
@@ -574,13 +510,13 @@ int main(int argc, char *argv[]) {
     inner          = GTK_WIDGET(gtk_builder_get_object(builder, "inner"));
     ticker_fixed   = GTK_WIDGET(gtk_builder_get_object(builder, "ticker_fixed"));
     ticker_label   = GTK_WIDGET(gtk_builder_get_object(builder, "ticker_label"));
+
     // NEW: overlay drawing area for GIF
     gif_area       = GTK_WIDGET(gtk_builder_get_object(builder, "gif_area"));
 
     if (!window || !top_label || !current_image || !previous_image || !preceding_image ||
         !top_pane || !outermost || !outer || !inner || !ticker_fixed || !ticker_label || !gif_area) {
         g_printerr("Error: Missing widgets from Glade (check gif_area exists).\n");
-        g_object_unref(builder);
         return 1;
     }
 
@@ -602,9 +538,6 @@ int main(int argc, char *argv[]) {
 
     // Layout sizing + cleanup
     g_idle_add(set_paned_ratios, NULL);
-
-    // connect destroy: first set running flag, then quit and cleanup on destroy
-    g_signal_connect(window, "destroy", G_CALLBACK(on_app_destroy), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(cleanup_images), NULL);
 
@@ -615,35 +548,18 @@ int main(int argc, char *argv[]) {
     refocus_main_window(window);
 
     // Init tokens & ticker
-    g_mutex_init(&token_mutex);
-    g_mutex_lock(&token_mutex);
     strcpy(current_token, "--");
     strcpy(previous_token, "--");
     strcpy(preceding_token, "--");
-    g_mutex_unlock(&token_mutex);
 
     g_timeout_add(100,  (GSourceFunc)update_ui_from_serial, NULL);
     g_timeout_add(1000, (GSourceFunc)animate_ticker, NULL);
 
     // Serial thread
     pthread_t serial_thread;
-    if (pthread_create(&serial_thread, NULL, serial_reader_thread, NULL) == 0) {
-        pthread_detach(serial_thread);
-    } else {
-        g_printerr("Failed to create serial thread\n");
-    }
-
-    // free builder & css provider (we already got widgets)
-    g_object_unref(builder);
-    g_object_unref(css_provider);
+    pthread_create(&serial_thread, NULL, serial_reader_thread, NULL);
+    pthread_detach(serial_thread);
 
     gtk_main();
-
-    // signal exit and allow threads to wind down
-    app_running = FALSE;
-    // small cleanup
-    cleanup_images();
-    g_mutex_clear(&token_mutex);
-
     return 0;
 }
