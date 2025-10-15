@@ -272,7 +272,7 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_widget_get_allocation(outer, &outer_alloc);
     gtk_widget_get_allocation(inner, &inner_alloc);
 
-    gtk_paned_set_position(GTK_PANED(top_pane), top_alloc.height * 0.08);
+    gtk_paned_set_position(GTK_PANED(top_pane), top_alloc.height * 0.1);
     gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.90);
     gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.72);
     gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.70);
