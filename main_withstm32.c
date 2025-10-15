@@ -527,22 +527,31 @@ int main(int argc, char *argv[]) {
     // Fullscreen & styling
         // Show and raise main window
     gtk_widget_show_all(window);
+    // Show and raise main window
+    gtk_widget_show_all(window);
 
-    /* --- Force the window to match the screen root size (kiosk-fallback) --- */
-    GdkScreen *screen = gdk_screen_get_default();
-    if (screen) {
-        int screen_w = gdk_screen_get_width(screen);
-        int screen_h = gdk_screen_get_height(screen);
-        g_print("DEBUG: screen size %d x %d\n", screen_w, screen_h);
+    /* --- Force window to match full monitor size (GTK 3.22+ API, no deprecation warnings) --- */
+    GdkDisplay *display = gdk_display_get_default();
+    if (display) {
+        GdkMonitor *monitor = gdk_display_get_primary_monitor(display);
+        if (!monitor)
+            monitor = gdk_display_get_monitor(display, 0);  // fallback
 
-        /* Force a resize to the full screen geometry and then fullscreen.
-           Doing this after show_all avoids layout race conditions in which
-           containers constrain allocation. */
-        gtk_window_resize(GTK_WINDOW(window), screen_w, screen_h);
-        /* small yield to allow allocation to happen before fullscreen */
-        while (gtk_events_pending()) gtk_main_iteration();
-        gtk_window_fullscreen(GTK_WINDOW(window));
+        if (monitor) {
+            GdkRectangle geom;
+            gdk_monitor_get_geometry(monitor, &geom);
+            g_print("DEBUG: monitor geometry %d x %d\n", geom.width, geom.height);
+
+            gtk_window_move(GTK_WINDOW(window), geom.x, geom.y);
+            gtk_window_resize(GTK_WINDOW(window), geom.width, geom.height);
+            while (gtk_events_pending()) gtk_main_iteration();
+            gtk_window_fullscreen(GTK_WINDOW(window));
+        }
     }
+
+    // Ensure overlay starts hidden (in case Glade file toggles it)
+    gtk_widget_set_visible(gif_area, FALSE);
+    refocus_main_window(window);
 
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
 
