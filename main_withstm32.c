@@ -222,7 +222,7 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
 
 static void *image_generator_thread(void *arg) {
     generate_token_image(current_image, current_token, "Current Draw", "current.png", "peachpuff", "red",
-                         0.78, 0.18, 0.1, -0.07, 0.05, 0.41,
+                         0.80, 0.18, 0.1, -0.07, 0.05, 0.41,
                          "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
                          "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf");
 
@@ -277,7 +277,7 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.72);
     gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.70);
 
-    int top_font_size = (int)(outermost_alloc.height * 0.08 * 0.8 * PANGO_SCALE);
+    int top_font_size = (int)(outermost_alloc.height * 0.08 * 0.9 * PANGO_SCALE);
     int ticker_font_size = (int)(outermost_alloc.height * 0.045 * 0.9 * PANGO_SCALE);
 
     gtk_widget_set_margin_top(top_pane, (int)(outermost_alloc.height * 0.02));
