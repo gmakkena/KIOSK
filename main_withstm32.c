@@ -297,8 +297,9 @@ static gboolean set_paned_ratios(gpointer user_data) {
     pthread_t init_image_thread;
     pthread_create(&init_image_thread, NULL, image_generator_thread, NULL);
     pthread_detach(init_image_thread);
+    gtk_widget_hide(ticker_fixed);
 
-    g_timeout_add(100, finalize_ticker_setup, NULL);
+    //g_timeout_add(100, finalize_ticker_setup, NULL);
     return G_SOURCE_REMOVE;
 }
 
