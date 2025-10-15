@@ -526,6 +526,7 @@ int main(int argc, char *argv[]) {
 
     // Fullscreen & styling
         // Show and raise main window
+       // Show and raise main window
     gtk_widget_show_all(window);
 
     /* --- Force the window to match the screen root size (kiosk-fallback) --- */
@@ -543,8 +544,7 @@ int main(int argc, char *argv[]) {
         while (gtk_events_pending()) gtk_main_iteration();
         gtk_window_fullscreen(GTK_WINDOW(window));
     }
-gtk_widget_set_visible(gif_area, FALSE);
-    refocus_main_window(window);
+
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
 
     GtkCssProvider *css_provider = gtk_css_provider_new();
