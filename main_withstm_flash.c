@@ -265,27 +265,59 @@ static gboolean finalize_ticker_setup(gpointer data) {
 }
 
 // ===================== Layout sizing =====================
+/* Replace existing set_paned_ratios() with this version */
 static gboolean set_paned_ratios(gpointer user_data) {
+    /* Make sure paned handles are not wide */
     gtk_paned_set_wide_handle(GTK_PANED(top_pane), FALSE);
     gtk_paned_set_wide_handle(GTK_PANED(outermost), FALSE);
     gtk_paned_set_wide_handle(GTK_PANED(outer), FALSE);
     gtk_paned_set_wide_handle(GTK_PANED(inner), FALSE);
 
-    GtkAllocation top_alloc, outermost_alloc, outer_alloc, inner_alloc;
-    gtk_widget_get_allocation(top_pane, &top_alloc);
-    gtk_widget_get_allocation(outermost, &outermost_alloc);
-    gtk_widget_get_allocation(outer, &outer_alloc);
-    gtk_widget_get_allocation(inner, &inner_alloc);
+    /* Get the final allocation from the top-level window (most reliable) */
+    GtkAllocation win_alloc;
+    gtk_widget_get_allocation(window, &win_alloc);
 
-    gtk_paned_set_position(GTK_PANED(top_pane), top_alloc.height * 0.08);
-    gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.85);
-    gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.72);
-    gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.70);
+    /* Defensive check: if window allocation looks too small, retry shortly */
+    const int MIN_VALID = 50;
+    if (win_alloc.width < MIN_VALID || win_alloc.height < MIN_VALID) {
+        /* try again in a bit — this lets X / GTK finish mapping */
+        g_timeout_add(50, set_paned_ratios, NULL);
+        return G_SOURCE_REMOVE;
+    }
 
-    int top_font_size = (int)(outermost_alloc.height * 0.08 * 0.8 * PANGO_SCALE);
-    int ticker_font_size = (int)(outermost_alloc.height * 0.045 * 0.9 * PANGO_SCALE);
+    /* Debug print — remove once happy */
+    g_print("DEBUG: window alloc %d x %d\n", win_alloc.width, win_alloc.height);
 
-    gtk_widget_set_margin_top(top_pane, (int)(outermost_alloc.height * 0.02));
+    /* Ensure the paned widgets are allowed to expand to the full window */
+    gtk_widget_set_hexpand(outermost, TRUE);
+    gtk_widget_set_vexpand(outermost, TRUE);
+    gtk_widget_set_hexpand(outer, TRUE);
+    gtk_widget_set_vexpand(outer, TRUE);
+    gtk_widget_set_hexpand(inner, TRUE);
+    gtk_widget_set_vexpand(inner, TRUE);
+    gtk_widget_set_hexpand(top_pane, TRUE);
+    gtk_widget_set_vexpand(top_pane, TRUE);
+
+    /* Now compute paned positions using the window geometry.
+       Note: for vertical splits use heights; for horizontal splits use widths. */
+    int top_pane_pos   = (int)(win_alloc.height * 0.08);   /* top pane height (px) */
+    int outermost_pos  = (int)(win_alloc.height * 0.85);   /* split in outermost by height */
+    int outer_pos      = (int)(win_alloc.width  * 0.72);   /* position for horizontal paned 'outer' */
+    int inner_pos      = (int)(win_alloc.height * 0.70);   /* inner pane height */
+
+    /* Apply positions (cast to int already done). If any paned is oriented differently
+       (i.e., horizontal vs vertical) you might need to swap width/height usage — this
+       uses the pattern from your original code. */
+    gtk_paned_set_position(GTK_PANED(top_pane), top_pane_pos);
+    gtk_paned_set_position(GTK_PANED(outermost), outermost_pos);
+    gtk_paned_set_position(GTK_PANED(outer), outer_pos);
+    gtk_paned_set_position(GTK_PANED(inner), inner_pos);
+
+    /* Fonts & markup using the final window size (more stable than child allocations) */
+    int top_font_size = (int)(win_alloc.height * 0.08 * 0.8 * PANGO_SCALE);
+    int ticker_font_size = (int)(win_alloc.height * 0.045 * 0.9 * PANGO_SCALE);
+
+    gtk_widget_set_margin_top(top_pane, (int)(win_alloc.height * 0.02));
 
     char markup_top[256];
     snprintf(markup_top, sizeof(markup_top),
@@ -299,11 +331,12 @@ static gboolean set_paned_ratios(gpointer user_data) {
         ticker_font_size);
     gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
 
+    /* Start image generation thread once (unchanged) */
     pthread_t init_image_thread;
     pthread_create(&init_image_thread, NULL, image_generator_thread, NULL);
     pthread_detach(init_image_thread);
 
-    /* Keep ticker area fixed-size (so blinking doesn't re-layout parents) */
+    /* Keep ticker area fixed-size so flashing doesn't reflow parents */
     int tf_w = gtk_widget_get_allocated_width(ticker_fixed);
     int tf_h = gtk_widget_get_allocated_height(ticker_fixed);
     if (tf_w > 1 && tf_h > 1) {
@@ -321,13 +354,16 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_widget_set_hexpand(ticker_label, FALSE);
     gtk_widget_set_vexpand(ticker_label, FALSE);
 
-    /* Ensure ticker is visible and start flashing */
     gtk_widget_show(ticker_fixed);
     gtk_widget_show(ticker_label);
 
+    /* Start flashing timer if not started */
     if (flash_timer_id == 0) {
         flash_timer_id = g_timeout_add(flash_interval_ms, flash_ticker_cb, NULL);
     }
+
+    /* Force a resize/queue redraw so children obey new geometry */
+    gtk_widget_queue_resize(window);
 
     return G_SOURCE_REMOVE;
 }
