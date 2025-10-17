@@ -200,21 +200,49 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_paned_set_wide_handle(GTK_PANED(inner), FALSE);
 
     GtkAllocation top_alloc, outermost_alloc, outer_alloc, inner_alloc;
-    gtk_widget_get_allocation(top_pane,&top_alloc);
-    gtk_widget_get_allocation(outermost,&outermost_alloc);
-    gtk_widget_get_allocation(outer,&outer_alloc);
-    gtk_widget_get_allocation(inner,&inner_alloc);
+    gtk_widget_get_allocation(top_pane, &top_alloc);
+    gtk_widget_get_allocation(outermost, &outermost_alloc);
+    gtk_widget_get_allocation(outer, &outer_alloc);
+    gtk_widget_get_allocation(inner, &inner_alloc);
 
-    gtk_paned_set_position(GTK_PANED(top_pane),top_alloc.height*0.08);
-    gtk_paned_set_position(GTK_PANED(outermost),outermost_alloc.height*0.88);
-    gtk_paned_set_position(GTK_PANED(outer),outer_alloc.width*0.72);
-    gtk_paned_set_position(GTK_PANED(inner),inner_alloc.height*0.70);
+    // Provide sensible fallbacks if GTK hasn’t allocated yet
+    if (top_alloc.height == 0) top_alloc.height = 100;
+    if (outermost_alloc.height == 0) outermost_alloc.height = 800;
+    if (outer_alloc.width == 0) outer_alloc.width = 1200;
+    if (inner_alloc.height == 0) inner_alloc.height = 600;
 
-    pthread_t init_image_thread;
-    pthread_create(&init_image_thread,NULL,(void*)refresh_images_on_ui,NULL);
-    pthread_detach(init_image_thread);
+    // Proper proportional layout (similar to your original Glade look)
+    gtk_paned_set_position(GTK_PANED(top_pane),  top_alloc.height * 0.12); // top label visible
+    gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.88);
+    gtk_paned_set_position(GTK_PANED(outer),     outer_alloc.width * 0.72);
+    gtk_paned_set_position(GTK_PANED(inner),     inner_alloc.height * 0.70);
+
+    // Force label and ticker visible
+    gtk_widget_show(top_label);
+    gtk_widget_show(ticker_fixed);
+    gtk_widget_show(ticker_label);
+
+    // Update fonts
+    int top_font_size = (int)(outermost_alloc.height * 0.08 * 0.9 * PANGO_SCALE);
+    int ticker_font_size = (int)(outermost_alloc.height * 0.045 * 0.9 * PANGO_SCALE);
+
+    char markup_top[256];
+    snprintf(markup_top, sizeof(markup_top),
+        "<span font_family='Fira Sans' weight='bold' size='%d' foreground='#8B0000'>Aurum Mega Event</span>",
+        top_font_size);
+    gtk_label_set_markup(GTK_LABEL(top_label), markup_top);
+
+    char markup_ticker[256];
+    snprintf(markup_ticker, sizeof(markup_ticker),
+        "<span font_family='Arial' weight='bold' size='%d' foreground='#2F4F4F'>Aurum Smart Tech</span>",
+        ticker_font_size);
+    gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
+
+    // Refresh tokens
+    g_idle_add(refresh_images_on_ui, NULL);
     return G_SOURCE_REMOVE;
 }
+
 
 // ===================== SERIAL READER =====================
 static void shift_tokens(const char *new_token){
@@ -317,7 +345,8 @@ int main(int argc,char *argv[]){
     gtk_window_fullscreen(GTK_WINDOW(window));
     gtk_window_set_decorated(GTK_WINDOW(window),FALSE);
 
-    g_timeout_add(200,set_paned_ratios,NULL);
+    g_timeout_add(200, set_paned_ratios, NULL);
+g_timeout_add(800, set_paned_ratios, NULL);
     gtk_widget_set_visible(gif_area,FALSE);
 
     pthread_t serial_thread;
