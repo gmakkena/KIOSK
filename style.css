@@ -12,3 +12,23 @@ paned > separator {
   box-shadow: 0 0 20px #00CED1;
   border-radius: 10px;
 }
+
+
+/* Hide GtkPaned divider lines and handles completely */
+GtkPaned,
+.pane-separator,
+.separator,
+handle {
+  background: none;
+  border: none;
+  box-shadow: none;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+/* Optional: make background pure black for kiosk display */
+window, GtkWindow {
+  background-color: #000;
+}
