@@ -30,5 +30,5 @@ handle {
 
 /* Optional: make background pure black for kiosk display */
 window, GtkWindow {
-  background-color: #000;
+  background-color: peachpuff;
 }
