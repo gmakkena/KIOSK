@@ -236,6 +236,16 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_paned_set_wide_handle(GTK_PANED(outer), FALSE);
     gtk_paned_set_wide_handle(GTK_PANED(inner), FALSE);
 
+    // These prevent GTK from drawing 1px dividers
+    gtk_widget_set_margin_top(GTK_WIDGET(top_pane), 0);
+    gtk_widget_set_margin_bottom(GTK_WIDGET(top_pane), 0);
+    gtk_widget_set_margin_start(GTK_WIDGET(top_pane), 0);
+    gtk_widget_set_margin_end(GTK_WIDGET(top_pane), 0);
+
+    gtk_widget_set_margin_top(GTK_WIDGET(outermost), 0);
+    gtk_widget_set_margin_bottom(GTK_WIDGET(outermost), 0);
+    gtk_widget_set_margin_start(GTK_WIDGET(outermost), 0);
+    gtk_widget_set_margin_end(GTK_WIDGET(outermost), 0);
     GtkAllocation top_alloc, outermost_alloc;
     gtk_widget_get_allocation(top_pane, &top_alloc);
     gtk_widget_get_allocation(outermost, &outermost_alloc);
@@ -393,7 +403,8 @@ int main(int argc, char *argv[]) {
     }
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
 
-    g_idle_add(set_paned_ratios,NULL);
+   // g_idle_add(set_paned_ratios,NULL);
+    g_timeout_add(200, set_paned_ratios, NULL);
     g_signal_connect(window,"destroy",G_CALLBACK(gtk_main_quit),NULL);
     g_signal_connect(window,"destroy",G_CALLBACK(cleanup_images),NULL);
     gtk_widget_set_visible(gif_area,FALSE);
