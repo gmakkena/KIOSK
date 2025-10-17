@@ -382,7 +382,7 @@ static void *serial_reader_thread(void *arg) {
                     char *field2 = strtok_r(NULL, " ", &saveptr); // param or number
 
                     // 1) : commands e.g. ":00 1 12" or ":00 3 6A"
-                    if (field0 && field0[0] == ':') {
+                    if (field0 && strcmp(field0, ":00") == 0) {
                         if (field1 && field2) {
                             if (strcmp(field1, "1") == 0) {
                                  // :00 1 12 -> treat as a NEW draw: shift tokens (preserve history)
