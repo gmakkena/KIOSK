@@ -333,6 +333,18 @@ int main(int argc,char *argv[]){
     ticker_fixed=GTK_WIDGET(gtk_builder_get_object(builder,"ticker_fixed"));
     ticker_label=GTK_WIDGET(gtk_builder_get_object(builder,"ticker_label"));
     gif_area=GTK_WIDGET(gtk_builder_get_object(builder,"gif_area"));
+    char *cfg_label = read_config_value("/boot/aurum.txt", "AURUM_TOP_LABEL");
+if (!cfg_label) {
+    cfg_label = read_config_value("/boot/firmware/aurum.txt", "AURUM_TOP_LABEL");
+}
+
+if (cfg_label) {
+    gtk_label_set_text(GTK_LABEL(top_label), cfg_label);
+    g_print("Loaded top label from config: %s\n", cfg_label);
+    free(cfg_label);
+} else {
+    g_print("No /boot/firmware/aurum.txt found or no AURUM_TOP_LABEL entry.\n");
+}
 
     GtkCssProvider *css=gtk_css_provider_new();
     gtk_css_provider_load_from_path(css,"style.css",NULL);
