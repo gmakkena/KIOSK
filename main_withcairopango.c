@@ -126,7 +126,9 @@ static gboolean hide_overlay_gif(gpointer user_data) {
 // ===================== TOKEN DRAWING (CAIRO + PANGO) =====================
 static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
                                      const char *number, const char *label,
-                                     const char *bg_hex, const char *fg_hex,
+                                     const char *bg_hex,
+                                     const char *num_fg_hex,
+                                     const char *label_fg_hex,
                                      double number_frac, double label_frac,
                                      const char *num_font, const char *lab_font)
 {
