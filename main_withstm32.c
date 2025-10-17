@@ -210,7 +210,10 @@ static void generate_token_image(GtkWidget *widget, const char *number, const ch
         label_font, label_pointsize, label_x_offset, label_y_offset, label,
         filename);
 
-    system(command);
+    //system(command);
+    g_print("RUN: %s\n", command);
+int rc = system(command);
+g_print("system() rc=%d WEXITSTATUS=%d\n", rc, WIFEXITED(rc) ? WEXITSTATUS(rc) : -1);
 }
 
 static gboolean refresh_images_on_ui(gpointer user_data) {
@@ -494,6 +497,13 @@ static void cleanup_images(void) {
 
 // ===================== main =====================
 int main(int argc, char *argv[]) {
+    FILE *logf = fopen("/home/pi/app_debug.log", "a+");
+if (logf) {
+    dup2(fileno(logf), STDOUT_FILENO);
+    dup2(fileno(logf), STDERR_FILENO);
+    setvbuf(stdout, NULL, _IOLBF, 0); // line-buffered
+    setvbuf(stderr, NULL, _IOLBF, 0);
+}
     gtk_init(&argc, &argv);
 
     // NOTE: this expects your updated Glade with GtkOverlay + drawing area id="gif_area"
