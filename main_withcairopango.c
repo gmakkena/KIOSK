@@ -236,21 +236,23 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_paned_set_wide_handle(GTK_PANED(outer), FALSE);
     gtk_paned_set_wide_handle(GTK_PANED(inner), FALSE);
 
-    // These prevent GTK from drawing 1px dividers
-    gtk_widget_set_margin_top(GTK_WIDGET(top_pane), 0);
-    gtk_widget_set_margin_bottom(GTK_WIDGET(top_pane), 0);
-    gtk_widget_set_margin_start(GTK_WIDGET(top_pane), 0);
-    gtk_widget_set_margin_end(GTK_WIDGET(top_pane), 0);
+   GtkWidget *panes[] = { top_pane, outermost, outer, inner };
+    for (int i = 0; i < 4; i++) {
+        gtk_widget_set_margin_top(panes[i], 0);
+        gtk_widget_set_margin_bottom(panes[i], 0);
+        gtk_widget_set_margin_start(panes[i], 0);
+        gtk_widget_set_margin_end(panes[i], 0);
+    }
 
-    gtk_widget_set_margin_top(GTK_WIDGET(outermost), 0);
-    gtk_widget_set_margin_bottom(GTK_WIDGET(outermost), 0);
-    gtk_widget_set_margin_start(GTK_WIDGET(outermost), 0);
-    gtk_widget_set_margin_end(GTK_WIDGET(outermost), 0);
-    GtkAllocation top_alloc, outermost_alloc;
+    GtkAllocation top_alloc, outermost_alloc, outer_alloc, inner_alloc;
     gtk_widget_get_allocation(top_pane, &top_alloc);
     gtk_widget_get_allocation(outermost, &outermost_alloc);
+    gtk_widget_get_allocation(outer, &outer_alloc);
+    gtk_widget_get_allocation(inner, &inner_alloc);
     gtk_paned_set_position(GTK_PANED(top_pane), top_alloc.height * 0.1);
     gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.90);
+    gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.72);          // current vs previous
+    gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.70);   
 
     char markup_top[256];
     snprintf(markup_top, sizeof(markup_top),
