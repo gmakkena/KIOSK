@@ -346,9 +346,10 @@ int main(int argc,char *argv[]){
     gtk_window_set_decorated(GTK_WINDOW(window),FALSE);
 
     g_timeout_add(200, set_paned_ratios, NULL);
-g_timeout_add(800, set_paned_ratios, NULL);
+//g_timeout_add(800, set_paned_ratios, NULL);
     gtk_widget_set_visible(gif_area,FALSE);
-
+    gtk_widget_hide(ticker_fixed);
+gtk_widget_hide(ticker_label);
     pthread_t serial_thread;
     pthread_create(&serial_thread,NULL,serial_reader_thread,NULL);
     pthread_detach(serial_thread);
