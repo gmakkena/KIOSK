@@ -126,9 +126,7 @@ static gboolean hide_overlay_gif(gpointer user_data) {
 // ===================== TOKEN DRAWING (CAIRO + PANGO) =====================
 static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
                                      const char *number, const char *label,
-                                     const char *bg_hex,
-                                     const char *num_fg_hex,
-                                     const char *label_fg_hex,
+                                     const char *bg_hex, const char *fg_hex,
                                      double number_frac, double label_frac,
                                      const char *num_font, const char *lab_font)
 {
@@ -171,13 +169,7 @@ static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
     pango_layout_set_text(layout,label ? label : "",-1);
     pango_layout_get_pixel_size(layout,&tw,&th);
     tx=(w-tw)/2; ty=(h*0.8);
-    //cairo_set_source_rgb(cr,0.2,0.2,0.2);
-    double lr = 0.2, lg = 0.2, lb = 0.2;
-unsigned int r,g,b;
-if (label_fg_hex && sscanf(label_fg_hex,"#%02x%02x%02x",&r,&g,&b)==3)
-    lr = r/255.0, lg = g/255.0, lb = b/255.0;
-cairo_set_source_rgb(cr, lr, lg, lb);
-
+    cairo_set_source_rgb(cr,0.2,0.2,0.2);
     cairo_move_to(cr,tx,ty);
     pango_cairo_show_layout(cr,layout);
     pango_font_description_free(fdl);
@@ -191,27 +183,10 @@ cairo_set_source_rgb(cr, lr, lg, lb);
 }
 
 static gboolean refresh_images_on_ui(gpointer user_data) {
-  GdkPixbuf *pb1 = render_token_pixbuf(
-    current_image, current_token, "Current Draw",
-    "#FFDAB9",        // background
-    "#FF0000",        // number color (red)
-    "#202020",        // label color (dark gray)
-    0.7, 0.15, "Liberation Sans Bold", "Liberation Sans");
-
-GdkPixbuf *pb2 = render_token_pixbuf(
-    previous_image, previous_token, "Previous Draw",
-    "#FFDAB9",
-    "#0000FF",        // number color (blue)
-    "#000080",        // label color (navy)
-    0.6, 0.12, "Liberation Sans Bold", "Liberation Sans");
-
-GdkPixbuf *pb3 = render_token_pixbuf(
-    preceding_image, preceding_token, "Preceding Draw",
-    "#FFDAB9",
-    "#8B4513",        // number color (brown)
-    "#5C4033",        // label color (dark brown)
-    0.6, 0.12, "Liberation Sans Bold", "Liberation Sans");
- if(pb1){gtk_image_set_from_pixbuf(GTK_IMAGE(current_image),pb1);g_object_unref(pb1);}
+    GdkPixbuf *pb1 = render_token_pixbuf(current_image,current_token,"Current Draw","#FFDAB9","#FF0000",0.7,0.15,"Liberation Sans Bold","Liberation Sans");
+    GdkPixbuf *pb2 = render_token_pixbuf(previous_image,previous_token,"Previous Draw","#FFDAB9","#0000FF",0.45,0.08,"Liberation Sans Bold","Liberation Sans");
+    GdkPixbuf *pb3 = render_token_pixbuf(preceding_image,preceding_token,"Preceding Draw","#FFDAB9","#8B4513",0.6,0.12,"Liberation Sans Bold","Liberation Sans");
+    if(pb1){gtk_image_set_from_pixbuf(GTK_IMAGE(current_image),pb1);g_object_unref(pb1);}
     if(pb2){gtk_image_set_from_pixbuf(GTK_IMAGE(previous_image),pb2);g_object_unref(pb2);}
     if(pb3){gtk_image_set_from_pixbuf(GTK_IMAGE(preceding_image),pb3);g_object_unref(pb3);}
     return FALSE;
