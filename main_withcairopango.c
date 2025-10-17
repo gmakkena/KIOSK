@@ -275,11 +275,23 @@ static gboolean set_paned_ratios(gpointer user_data) {
     int top_font_size = (int)(outermost_alloc.height * 0.08 * 0.9 * PANGO_SCALE);
     int ticker_font_size = (int)(outermost_alloc.height * 0.045 * 0.9 * PANGO_SCALE);
 
-    char markup_top[256];
-    snprintf(markup_top, sizeof(markup_top),
-        "<span font_family='Fira Sans' weight='bold' size='%d' foreground='#8B0000'>Aurum Mega Event</span>",
-        top_font_size);
-    gtk_label_set_markup(GTK_LABEL(top_label), markup_top);
+   // Get the current plain text (may have been set from /boot/aurum.txt earlier)
+const char *plain = gtk_label_get_text(GTK_LABEL(top_label));
+if (!plain) plain = "";
+
+// Escape the text so any special characters don't break Pango markup
+char *escaped = g_markup_escape_text(plain, -1);
+
+// Build markup using escaped string and desired font size/color
+char markup_top[512];
+snprintf(markup_top, sizeof(markup_top),
+    "<span font_family='Fira Sans' weight='bold' size='%d' foreground='#8B0000'>%s</span>",
+    top_font_size, escaped);
+
+// Apply markup and free temporary memory
+gtk_label_set_markup(GTK_LABEL(top_label), markup_top);
+g_free(escaped);
+
 
     char markup_ticker[256];
     snprintf(markup_ticker, sizeof(markup_ticker),
