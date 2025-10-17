@@ -184,7 +184,7 @@ static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
 
 static gboolean refresh_images_on_ui(gpointer user_data) {
     GdkPixbuf *pb1 = render_token_pixbuf(current_image,current_token,"Current Draw","#FFDAB9","#FF0000",0.7,0.15,"Liberation Sans Bold","Liberation Sans");
-    GdkPixbuf *pb2 = render_token_pixbuf(previous_image,previous_token,"Previous Draw","#FFDAB9","#0000FF",0.6,0.12,"Liberation Sans Bold","Liberation Sans");
+    GdkPixbuf *pb2 = render_token_pixbuf(previous_image,previous_token,"Previous Draw","#FFDAB9","#0000FF",0.45,0.08,"Liberation Sans Bold","Liberation Sans");
     GdkPixbuf *pb3 = render_token_pixbuf(preceding_image,preceding_token,"Preceding Draw","#FFDAB9","#8B4513",0.6,0.12,"Liberation Sans Bold","Liberation Sans");
     if(pb1){gtk_image_set_from_pixbuf(GTK_IMAGE(current_image),pb1);g_object_unref(pb1);}
     if(pb2){gtk_image_set_from_pixbuf(GTK_IMAGE(previous_image),pb2);g_object_unref(pb2);}
