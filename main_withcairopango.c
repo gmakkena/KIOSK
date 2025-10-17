@@ -10,6 +10,55 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+//======== Read top label
+
+// ==========================================
+// Helper: read a value like KEY="value" from /boot/aurum.txt
+// ==========================================
+static char *read_config_value(const char *path, const char *key) {
+    FILE *f = fopen(path, "r");
+    if (!f) return NULL;
+
+    char *line = NULL;
+    size_t len = 0;
+    char *result = NULL;
+    size_t keylen = strlen(key);
+
+    while (getline(&line, &len, f) != -1) {
+        // skip leading whitespace
+        char *p = line;
+        while (*p && (*p == ' ' || *p == '\t')) p++;
+        // skip comments / blank lines
+        if (*p == '#' || *p == '\n' || *p == '\0') continue;
+
+        // match KEY=
+        if (strncmp(p, key, keylen) == 0 && p[keylen] == '=') {
+            char *val = p + keylen + 1;
+            // trim leading spaces
+            while (*val == ' ' || *val == '\t') val++;
+            // trim trailing whitespace/newlines
+            char *end = val + strlen(val);
+            while (end > val && (*(end - 1) == '\n' || *(end - 1) == '\r' ||
+                                 *(end - 1) == ' ' || *(end - 1) == '\t'))
+                end--;
+            *end = '\0';
+            // strip quotes if present
+            if ((val[0] == '"' && end > val + 1 && *(end - 1) == '"') ||
+                (val[0] == '\'' && end > val + 1 && *(end - 1) == '\'')) {
+                val++;
+                *(end - 1) = '\0';
+            }
+            result = strdup(val);
+            break;
+        }
+    }
+
+    free(line);
+    fclose(f);
+    return result;
+}
+
+
 // ===================== Widgets =====================
 GtkWidget *window;
 GtkWidget *top_label;
@@ -333,10 +382,7 @@ int main(int argc,char *argv[]){
     ticker_fixed=GTK_WIDGET(gtk_builder_get_object(builder,"ticker_fixed"));
     ticker_label=GTK_WIDGET(gtk_builder_get_object(builder,"ticker_label"));
     gif_area=GTK_WIDGET(gtk_builder_get_object(builder,"gif_area"));
-    char *cfg_label = read_config_value("/boot/aurum.txt", "AURUM_TOP_LABEL");
-if (!cfg_label) {
-    cfg_label = read_config_value("/boot/firmware/aurum.txt", "AURUM_TOP_LABEL");
-}
+    char *cfg_label = read_config_value("/boot/firmware/aurum.txt", "AURUM_TOP_LABEL");
 
 if (cfg_label) {
     gtk_label_set_text(GTK_LABEL(top_label), cfg_label);
