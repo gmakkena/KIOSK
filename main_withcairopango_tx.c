@@ -250,8 +250,34 @@ static gboolean show_fullscreen_gif(gpointer filename_ptr) {
     refocus_main_window(window);
     return FALSE;
 }
+static gboolean hide_overlay_gif(gpointer user_data)
+{
+    gif_playing = FALSE;
 
-static gboolean hide_overlay_gif(gpointer user_data) {
+    // stop timeout & unref animation
+    gif_player_cleanup();
+
+    // DISCONNECT draw handler so GTK never paints GIF again
+    if (gif_draw_handler_id != 0 && gif_area) {
+        g_signal_handler_disconnect(gif_area, gif_draw_handler_id);
+        gif_draw_handler_id = 0;
+    }
+
+    // force drawing area to stop covering UI
+    if (gif_area) {
+        gtk_widget_hide(gif_area);
+
+        // replace draw handler with EMPTY draw so nothing gets painted
+        g_signal_connect(gif_area, "draw", G_CALLBACK(+[] (GtkWidget *w, cairo_t *cr, gpointer d){
+            // do nothing → transparency
+            return FALSE;
+        }), NULL);
+    }
+
+    g_idle_add(refresh_images_on_ui, NULL);
+    refocus_main_window(window);
+    return FALSE;
+}
 
     gif_playing = FALSE;
     gif_player_cleanup();
