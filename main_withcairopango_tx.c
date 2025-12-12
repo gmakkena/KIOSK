@@ -256,7 +256,7 @@ static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
     ty = (h * 0.8);
 
    // cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-    cairo_set_source_rgb(cr, 0.502, 0.502, 0.0);
+    cairo_set_source_rgb(cr, 0.255, 0.412, 0.882);
    cairo_move_to(cr, tx, ty);
     pango_cairo_show_layout(cr, layout);
 
