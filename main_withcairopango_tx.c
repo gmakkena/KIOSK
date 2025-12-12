@@ -191,14 +191,32 @@ static gboolean show_fullscreen_gif(gpointer filename_ptr) {
 static gboolean hide_overlay_gif(gpointer user_data) {
 
     if (gif_area) {
-        gtk_widget_hide(gif_area);             // hide
-        gtk_widget_set_no_show_all(gif_area, TRUE);
-        gtk_widget_set_size_request(gif_area, 1, 1);  // <-- CRITICAL FIX
+        GtkWidget *parent = gtk_widget_get_parent(gif_area);
+
+        // Remove gif_area fully from UI
+        if (parent) {
+            gtk_container_remove(GTK_CONTAINER(parent), gif_area);
+        }
+
+        // Optional: recreate a clean gif_area for next GIF
+        gif_area = gtk_drawing_area_new();
+        gtk_widget_set_visible(gif_area, FALSE);
+
+        // Insert it back to the parent container
+        if (parent) {
+            gtk_container_add(GTK_CONTAINER(parent), gif_area);
+            gtk_widget_show(gif_area);
+            gtk_widget_set_visible(gif_area, FALSE);
+        }
     }
 
     gif_player_cleanup();
 
+    // Redraw token UI
     g_idle_add(refresh_images_on_ui, NULL);
+
+    // Refocus safely
+    refocus_main_window(window);
 
     return FALSE;
 }
