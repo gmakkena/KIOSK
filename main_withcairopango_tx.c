@@ -333,7 +333,7 @@ static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
 static gboolean refresh_images_on_ui(gpointer user_data) {
     GdkPixbuf *pb1 = render_token_pixbuf(current_image, current_token, "Current Draw",
                                          "#FFDAB9", "#FF0000",
-                                         0.69, 0.15,
+                                         0.68, 0.15,
                                          "Liberation Sans Bold", "Liberation Sans");
 
     GdkPixbuf *pb2 = render_token_pixbuf(previous_image, previous_token, "Previous Draw",
