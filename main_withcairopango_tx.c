@@ -353,9 +353,7 @@ static void shift_tokens(const char *new_token) {
 }
 
 static gboolean update_ui_from_serial(gpointer user_data) {
-     // 💥 Important fix: stop any active GIF and hide overlay
-    if (gif_area) gtk_widget_set_visible(gif_area, FALSE);
-    gif_player_cleanup();
+     
 
     g_idle_add(refresh_images_on_ui, NULL);
     return FALSE;
