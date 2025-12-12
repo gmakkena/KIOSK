@@ -14,6 +14,9 @@
 int serial_fd = -1;
 pthread_mutex_t serial_lock = PTHREAD_MUTEX_INITIALIZER;
 
+gulong gif_draw_handler_id = 0;
+
+
 // ==========================================
 // Read KEY="value" from config
 // ==========================================
@@ -165,7 +168,8 @@ static gboolean show_fullscreen_gif(gpointer filename_ptr) {
     gif_player = g_new0(GifPlayer, 1);
     gif_player->drawing_area = gif_area;
 
-    g_signal_connect(gif_area, "draw", G_CALLBACK(gif_player_draw), NULL);
+   // g_signal_connect(gif_area, "draw", G_CALLBACK(gif_player_draw), NULL);
+gif_draw_handler_id = g_signal_connect(gif_area, "draw", G_CALLBACK(gif_player_draw), NULL);
 
     GError *error = NULL;
     gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
@@ -187,36 +191,29 @@ static gboolean show_fullscreen_gif(gpointer filename_ptr) {
     refocus_main_window(window);
     return FALSE;
 }
-
 static gboolean hide_overlay_gif(gpointer user_data) {
 
-    if (gif_area) {
-        GtkWidget *parent = gtk_widget_get_parent(gif_area);
-
-        // Remove gif_area fully from UI
-        if (parent) {
-            gtk_container_remove(GTK_CONTAINER(parent), gif_area);
-        }
-
-        // Optional: recreate a clean gif_area for next GIF
-        gif_area = gtk_drawing_area_new();
-        gtk_widget_set_visible(gif_area, FALSE);
-
-        // Insert it back to the parent container
-        if (parent) {
-            gtk_container_add(GTK_CONTAINER(parent), gif_area);
-            gtk_widget_show(gif_area);
-            gtk_widget_set_visible(gif_area, FALSE);
-        }
+    // Stop timeout
+    if (gif_player && gif_player->timeout_id) {
+        g_source_remove(gif_player->timeout_id);
+        gif_player->timeout_id = 0;
     }
 
+    // Disconnect draw handler
+    if (gif_draw_handler_id > 0) {
+        g_signal_handler_disconnect(gif_area, gif_draw_handler_id);
+        gif_draw_handler_id = 0;
+    }
+
+    // Clear player completely
     gif_player_cleanup();
 
-    // Redraw token UI
-    g_idle_add(refresh_images_on_ui, NULL);
+    // Hide the widget
+    if (gif_area)
+        gtk_widget_set_visible(gif_area, FALSE);
 
-    // Refocus safely
-    refocus_main_window(window);
+    // Force redraw of images
+    g_idle_add(refresh_images_on_ui, NULL);
 
     return FALSE;
 }
