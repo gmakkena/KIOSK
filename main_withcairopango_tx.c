@@ -222,6 +222,30 @@ static gboolean hide_overlay_gif(gpointer user_data) {
     return FALSE;
 }
 
+// ===================== TTY2 GIF PLAYER =====================
+static void play_gif_on_tty2(const char *gifpath) {
+    char cmd[512];
+
+    // Kill any previous mpv on tty2
+    system("killall -q mpv");
+
+    // Switch to tty2 first
+    system("sudo chvt 2");
+
+    // Build MPV command (loop forever, no audio, direct framebuffer)
+    snprintf(cmd, sizeof(cmd),
+        "mpv --really-quiet --loop --no-audio "
+        "--vo=tct --force-window=no '%s' > /dev/tty2 2>&1 &",
+        gifpath
+    );
+
+    system(cmd);
+
+    // Note: We do NOT return to tty1 here.
+    // We stay on tty2 until the next token arrives.
+}
+
+
 // ===================== SHOW GIF (MODE A) =====================
 static gboolean show_fullscreen_gif(gpointer filename_ptr) {
     const char *filename = filename_ptr;
@@ -494,14 +518,14 @@ static void *serial_reader_thread(void *arg) {
                     else if (f0 && strcmp(f0, "$M") == 0) {
                         if (f1) {
                             if (!strcmp(f1, "G1")) {
-                                g_idle_add(show_fullscreen_gif, (gpointer)"gameover1.gif");
+                                 play_gif_on_tty2("/home/pi/KIOSK/gameover.gif");
                                 strcpy(current_token, "--");
                                 strcpy(previous_token, "--");
                                 strcpy(preceding_token, "--");
                                 g_idle_add(update_ui_from_serial, NULL);
                             }
                             else if (!strcmp(f1, "C1")) {
-                                g_idle_add(show_fullscreen_gif, (gpointer)"congratulations1.gif");
+                                play_gif_on_tty2("/home/pi/KIOSK/congratulations1.gif");
                             }
                             else {
                                 g_idle_add(hide_overlay_gif, NULL);
@@ -513,8 +537,9 @@ static void *serial_reader_thread(void *arg) {
                     // NORMAL TOKEN
                     // -------------------------
                     else if (f0) {
-                        if (gif_playing)
-                            g_idle_add(hide_overlay_gif, NULL);
+                        system("killall -q mpv");
+    system("sudo chvt 1");
+
 
                         shift_tokens(f0);
                         g_idle_add(update_ui_from_serial, NULL);
