@@ -13,6 +13,7 @@
 // ===================== GLOBAL SERIAL =====================
 int serial_fd = -1;
 pthread_mutex_t serial_lock = PTHREAD_MUTEX_INITIALIZER;
+static gboolean refresh_images_on_ui(gpointer user_data);
 
 static gulong gif_draw_handler_id = 0;
 static gboolean gif_playing = FALSE;  
