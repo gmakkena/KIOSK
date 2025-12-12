@@ -186,63 +186,88 @@ static void gif_player_cleanup(void) {
     // mark as not playing before we return
     gif_playing = FALSE;
 }
+
 static gboolean show_fullscreen_gif(gpointer filename_ptr) {
     const char *filename = (const char *)filename_ptr;
 
-    // ensure we start with a clean state
+    // -----------------------------------------------
+    // If gif_area was removed earlier → recreate it
+    // -----------------------------------------------
+    if (!gif_area) {
+        gif_area = gtk_drawing_area_new();
+        gtk_widget_set_app_paintable(gif_area, TRUE);
+        gtk_widget_set_hexpand(gif_area, TRUE);
+        gtk_widget_set_vexpand(gif_area, TRUE);
+
+        // locate overlay; window's main child is GtkOverlay
+        GtkWidget *main_child = gtk_bin_get_child(GTK_BIN(window));
+        if (GTK_IS_OVERLAY(main_child)) {
+            gtk_overlay_add_overlay(GTK_OVERLAY(main_child), gif_area);
+        } else {
+            g_printerr("ERROR: main child is not GtkOverlay\n");
+            return FALSE;
+        }
+    }
+
+    // -----------------------------------------------
+    // Cleanup previous animation completely
+    // -----------------------------------------------
     gif_player_cleanup();
 
     gif_player = g_new0(GifPlayer, 1);
     gif_player->drawing_area = gif_area;
 
-    // create animation
+    // Load GIF
     GError *error = NULL;
     gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
     if (error || !gif_player->animation) {
-        g_printerr("GIF Error: %s\n", error ? error->message : "unknown");
+        g_printerr("GIF Load Error: %s\n", error ? error->message : "unknown");
         if (error) g_error_free(error);
         gif_player_cleanup();
         return FALSE;
     }
+
     gif_player->iter = gdk_pixbuf_animation_get_iter(gif_player->animation, NULL);
     gif_player->timer = g_timer_new();
     g_timer_start(gif_player->timer);
 
-    // mark playing before hookup
     gif_playing = TRUE;
 
-    // connect draw if not already connected
-    if (gif_area && gif_draw_handler_id == 0) {
-        gif_draw_handler_id = g_signal_connect(gif_area, "draw", G_CALLBACK(gif_player_draw), NULL);
+    // -----------------------------------------------
+    // Connect draw handler ONLY once
+    // -----------------------------------------------
+    if (gif_draw_handler_id == 0) {
+        gif_draw_handler_id = g_signal_connect(gif_area, "draw",
+                                               G_CALLBACK(gif_player_draw), NULL);
     }
 
-    gtk_widget_set_visible(gif_area, TRUE);
+    gtk_widget_show(gif_area);
+    gtk_widget_queue_draw(gif_area);
+    gtk_widget_grab_focus(gif_area);
+
     gif_player->timeout_id = g_timeout_add(10, gif_player_advance, NULL);
 
-    // bring window to front
     refocus_main_window(window);
     return FALSE;
 }
 
-
 static gboolean hide_overlay_gif(gpointer user_data) {
-    // mark not playing first so draw becomes no-op immediately
-    gif_playing = FALSE;
 
-    // stop timeouts / cleanup animation objects (this also disconnects handler)
+    gif_playing = FALSE;
     gif_player_cleanup();
 
-    // hide the area so it doesn't block input or obscure visuals
     if (gif_area) {
         gtk_widget_hide(gif_area);
+
+        GtkWidget *parent = gtk_widget_get_parent(gif_area);
+        if (parent) {
+            gtk_container_remove(GTK_CONTAINER(parent), gif_area);
+        }
+        gif_area = NULL;
     }
 
-    // explicitly refresh token images
     g_idle_add(refresh_images_on_ui, NULL);
-
-    // ensure main window is in front
     refocus_main_window(window);
-
     return FALSE;
 }
 
