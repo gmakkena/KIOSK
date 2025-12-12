@@ -189,17 +189,20 @@ static gboolean show_fullscreen_gif(gpointer filename_ptr) {
 }
 
 static gboolean hide_overlay_gif(gpointer user_data) {
-    if (gif_area) gtk_widget_set_visible(gif_area, FALSE);
-    gif_player_cleanup();
-        gtk_widget_queue_draw(window);
-        // 🔥 Force token images to refresh
-    g_idle_add(refresh_images_on_ui, NULL);
 
-    // 🔥 Re-focus the main window
-    refocus_main_window(window);
+    if (gif_area) {
+        gtk_widget_hide(gif_area);             // hide
+        gtk_widget_set_no_show_all(gif_area, TRUE);
+        gtk_widget_set_size_request(gif_area, 1, 1);  // <-- CRITICAL FIX
+    }
+
+    gif_player_cleanup();
+
+    g_idle_add(refresh_images_on_ui, NULL);
 
     return FALSE;
 }
+
 
 // ===================== TOKEN RENDER =====================
 static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
