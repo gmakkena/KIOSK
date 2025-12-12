@@ -186,21 +186,37 @@ static void gif_player_cleanup(void) {
 // ===================== HIDE GIF (MODE A) =====================
 static gboolean hide_overlay_gif(gpointer user_data) {
     g_print("Hiding GIF overlay...\n");
-    
+
     gif_playing = FALSE;
 
+    // Stop animation timeouts
     gif_player_cleanup();
 
-    // Disconnect draw handler so no stale painting happens
-    if (gif_draw_handler_id && gif_area) {
+    // Disconnect draw handler (VERY important)
+    if (gif_draw_handler_id != 0) {
         g_signal_handler_disconnect(gif_area, gif_draw_handler_id);
         gif_draw_handler_id = 0;
     }
 
-    if (gif_area)
-        gtk_widget_hide(gif_area);
+    // Force overlay to stop drawing
+    gtk_widget_set_no_show_all(gif_area, TRUE);
+    gtk_widget_hide(gif_area);
+    gtk_widget_set_no_show_all(gif_area, FALSE);
 
-    // Refresh token UI after GIF ends
+    // Make sure the underlying token widgets are visible
+    gtk_widget_show(current_image);
+    gtk_widget_show(previous_image);
+    gtk_widget_show(preceding_image);
+    gtk_widget_show(top_label);
+    gtk_widget_show(ticker_fixed);
+    gtk_widget_show(ticker_label);
+
+    // Force overlay stack to redraw from bottom up
+    gtk_widget_queue_draw(window);
+    gtk_widget_queue_draw(gif_area);
+    gtk_widget_queue_draw(top_pane);
+
+    // Regenerate token images
     g_idle_add(refresh_images_on_ui, NULL);
 
     return FALSE;
