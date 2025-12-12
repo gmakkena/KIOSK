@@ -149,25 +149,24 @@ static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
 
     return FALSE;
 }
-
 static void gif_player_cleanup(void) {
     if (!gif_player) return;
 
-    // stop timeout if present
     if (gif_player->timeout_id) {
         g_source_remove(gif_player->timeout_id);
         gif_player->timeout_id = 0;
     }
 
-    // unref animation and iter
     if (gif_player->animation) {
         g_object_unref(gif_player->animation);
         gif_player->animation = NULL;
     }
+
     if (gif_player->iter) {
         g_object_unref(gif_player->iter);
         gif_player->iter = NULL;
     }
+
     if (gif_player->timer) {
         g_timer_destroy(gif_player->timer);
         gif_player->timer = NULL;
@@ -175,16 +174,6 @@ static void gif_player_cleanup(void) {
 
     g_free(gif_player);
     gif_player = NULL;
-
-    // disconnect draw handler so it will no longer be invoked (safe if handler id = 0)
-    if (gif_draw_handler_id != 0 && gif_area && G_IS_OBJECT(gif_area)) {
-        // ignore result — may already be disconnected
-        g_signal_handler_disconnect(gif_area, gif_draw_handler_id);
-        gif_draw_handler_id = 0;
-    }
-
-    // mark as not playing before we return
-    gif_playing = FALSE;
 }
 
 static gboolean show_fullscreen_gif(gpointer filename_ptr) {
