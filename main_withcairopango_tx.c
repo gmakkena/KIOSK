@@ -191,7 +191,8 @@ static gboolean show_fullscreen_gif(gpointer filename_ptr) {
 static gboolean hide_overlay_gif(gpointer user_data) {
     if (gif_area) gtk_widget_set_visible(gif_area, FALSE);
     gif_player_cleanup();
-    refocus_main_window(window);
+        gtk_widget_queue_draw(window);
+
     return FALSE;
 }
 
