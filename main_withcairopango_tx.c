@@ -460,8 +460,12 @@ static void *serial_reader_thread(void *arg) {
                         }
                     }
                     else if (f0) {
-                        shift_tokens(f0);
-                        g_idle_add(update_ui_from_serial, NULL);
+                         if (gif_playing) {
+        g_idle_add(hide_overlay_gif, NULL);
+    }
+
+    shift_tokens(f0);
+    g_idle_add(update_ui_from_serial, NULL);
                     }
 
                 } else if (pos + 1 < sizeof(buf)) {
