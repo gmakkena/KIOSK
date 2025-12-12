@@ -1,6 +1,6 @@
 // ==========================
 //  TOKEN DISPLAY + GIF OVERLAY (MODE A)
-//  Fully Cleaned & Corrected
+//  FIXED: GIF Auto-Hide After Completion
 // ==========================
 
 #include <gtk/gtk.h>
@@ -123,13 +123,15 @@ static gboolean gif_player_advance(gpointer data) {
 
     double elapsed_ms = g_timer_elapsed(gif_player->timer, NULL) * 1000.0;
     int delay = gdk_pixbuf_animation_iter_get_delay_time(gif_player->iter);
-    if (delay < 0) delay = 100;
-
+    
+    if (delay < 0) delay = 100; // Default delay for static images or end of animation
+    
     if (elapsed_ms >= delay) {
         gdk_pixbuf_animation_iter_advance(gif_player->iter, NULL);
         gtk_widget_queue_draw(gif_area);
         g_timer_start(gif_player->timer);
     }
+    
     return G_SOURCE_CONTINUE;
 }
 
@@ -180,44 +182,11 @@ static void gif_player_cleanup(void) {
     g_free(gif_player);
     gif_player = NULL;
 }
-// ===================== SHOW GIF (MODE A) =====================
-static gboolean show_fullscreen_gif(gpointer filename_ptr) {
-    const char *filename = filename_ptr;
-
-    gif_playing = TRUE;
-
-    // Clean previous animation
-    gif_player_cleanup();
-    gif_player = g_new0(GifPlayer, 1);
-
-    // Load GIF
-    GError *error = NULL;
-    gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
-    if (!gif_player->animation) {
-        g_printerr("GIF load error: %s\n", error ? error->message : "unknown");
-        if (error) g_error_free(error);
-        return FALSE;
-    }
-
-    gif_player->iter = gdk_pixbuf_animation_get_iter(gif_player->animation, NULL);
-    gif_player->timer = g_timer_new();
-    g_timer_start(gif_player->timer);
-
-    // Install draw handler once
-    if (gif_draw_handler_id == 0) {
-        gif_draw_handler_id =
-            g_signal_connect(gif_area, "draw", G_CALLBACK(gif_player_draw), NULL);
-    }
-
-    gtk_widget_show(gif_area);
-    gtk_widget_queue_draw(gif_area);
-
-    gif_player->timeout_id = g_timeout_add(10, gif_player_advance, NULL);
-    return FALSE;
-}
 
 // ===================== HIDE GIF (MODE A) =====================
 static gboolean hide_overlay_gif(gpointer user_data) {
+    g_print("Hiding GIF overlay...\n");
+    
     gif_playing = FALSE;
 
     gif_player_cleanup();
@@ -234,6 +203,47 @@ static gboolean hide_overlay_gif(gpointer user_data) {
     // Refresh token UI after GIF ends
     g_idle_add(refresh_images_on_ui, NULL);
 
+    return FALSE;
+}
+
+// ===================== SHOW GIF (MODE A) =====================
+static gboolean show_fullscreen_gif(gpointer filename_ptr) {
+    const char *filename = filename_ptr;
+    
+    g_print("Loading GIF: %s\n", filename);
+
+    gif_playing = TRUE;
+
+    // Clean previous animation
+    gif_player_cleanup();
+    gif_player = g_new0(GifPlayer, 1);
+
+    // Load GIF
+    GError *error = NULL;
+    gif_player->animation = gdk_pixbuf_animation_new_from_file(filename, &error);
+    if (!gif_player->animation) {
+        g_printerr("GIF load error: %s\n", error ? error->message : "unknown");
+        if (error) g_error_free(error);
+        gif_playing = FALSE;
+        return FALSE;
+    }
+
+    gif_player->iter = gdk_pixbuf_animation_get_iter(gif_player->animation, NULL);
+    gif_player->timer = g_timer_new();
+    g_timer_start(gif_player->timer);
+
+    // Install draw handler once
+    if (gif_draw_handler_id == 0) {
+        gif_draw_handler_id =
+            g_signal_connect(gif_area, "draw", G_CALLBACK(gif_player_draw), NULL);
+    }
+
+    gtk_widget_show(gif_area);
+    gtk_widget_queue_draw(gif_area);
+
+    // Start animation loop - will keep looping until interrupted
+    gif_player->timeout_id = g_timeout_add(10, gif_player_advance, NULL);
+    
     return FALSE;
 }
 
