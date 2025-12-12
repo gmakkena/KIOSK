@@ -519,7 +519,7 @@ static void *serial_reader_thread(void *arg) {
                         if (f1) {
                             if (!strcmp(f1, "G1")) {
                                  system("mpv --really-quiet --no-terminal --no-input-default-bindings "
-       "--loop-playlist=inf --fullscreen /home/pi/KIOSK/congratulations1.gif &");
+       "--loop-playlist=no --fullscreen /home/pi/KIOSK/congratulations1.gif &");
 
                                 strcpy(current_token, "--");
                                 strcpy(previous_token, "--");
@@ -528,7 +528,7 @@ static void *serial_reader_thread(void *arg) {
                             }
                             else if (!strcmp(f1, "C1")) {
                                 system("mpv --really-quiet --no-terminal --no-input-default-bindings "
-       "--loop-playlist=inf --fullscreen /home/pi/KIOSK/congratulations1.gif &");
+       "--loop-playlist=no --fullscreen /home/pi/KIOSK/congratulations1.gif &");
 
                             }
                             else {
@@ -543,7 +543,7 @@ static void *serial_reader_thread(void *arg) {
                     else if (f0) {
                         system("killall -q mpv");
 
-
+                        //g_idle_add((GSourceFunc)refocus_main_window, window);
                         shift_tokens(f0);
                         g_idle_add(update_ui_from_serial, NULL);
                     }
