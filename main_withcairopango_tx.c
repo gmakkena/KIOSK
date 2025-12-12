@@ -217,22 +217,52 @@ static gboolean show_fullscreen_gif(gpointer filename_ptr) {
 }
 
 // ===================== HIDE GIF (MODE A) =====================
-static gboolean hide_overlay_gif(gpointer user_data) {
+static gboolean hide_overlay_gif(gpointer user_data)
+{
     gif_playing = FALSE;
 
-    gif_player_cleanup();
+    // Stop timers and free objects
+    if (gif_player) {
+        if (gif_player->timeout_id)
+            g_source_remove(gif_player->timeout_id);
 
-    // Disconnect draw handler so no stale painting happens
-    if (gif_draw_handler_id && gif_area) {
-        g_signal_handler_disconnect(gif_area, gif_draw_handler_id);
-        gif_draw_handler_id = 0;
+        if (gif_player->animation)
+            g_object_unref(gif_player->animation);
+
+        if (gif_player->iter)
+            g_object_unref(gif_player->iter);
+
+        if (gif_player->timer)
+            g_timer_destroy(gif_player->timer);
+
+        g_free(gif_player);
+        gif_player = NULL;
     }
 
-    if (gif_area)
+    // Force override draw handler with a blank one
+    if (gif_area) {
         gtk_widget_hide(gif_area);
 
-    // Refresh token UI after GIF ends
+        g_signal_handlers_disconnect_by_func(
+            gif_area,
+            G_CALLBACK(gif_player_draw),
+            NULL
+        );
+
+        // ADD THIS — a draw that paints nothing
+        g_signal_connect(gif_area, "draw",
+            G_CALLBACK(+[](GtkWidget *w, cairo_t *cr, gpointer d) {
+                return FALSE; // paint nothing, show background
+            }),
+            NULL
+        );
+
+        gtk_widget_queue_draw(gif_area);
+    }
+
+    // Refresh token screen
     g_idle_add(refresh_images_on_ui, NULL);
+    refocus_main_window(window);
 
     return FALSE;
 }
