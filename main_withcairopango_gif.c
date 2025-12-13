@@ -673,7 +673,14 @@ int main(int argc, char *argv[]) {
     );
 
     gtk_widget_show_all(window);
-     g_idle_add(set_paned_ratios, NULL);
+        // ---------------- Fullscreen Window ----------------
+    GdkScreen *screen = gdk_screen_get_default();
+    gtk_window_resize(GTK_WINDOW(window),
+                      gdk_screen_get_width(screen),
+                      gdk_screen_get_height(screen));
+    gtk_window_fullscreen(GTK_WINDOW(window));
+    gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
+    g_timeout_add(400, set_paned_ratios, NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(cleanup_images), NULL);
 
