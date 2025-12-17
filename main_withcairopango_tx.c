@@ -645,16 +645,22 @@ static void *serial_reader_thread(void *arg) {
                     // -------------------------
                     // FORMAT: : X 1 VALUE
                     // -------------------------
-                    if (f0 && f0[0] == ':') {
-                        if (f1 && f2 && strcmp(f1, "1") == 0) {
-                            if (gif_playing) g_idle_add(hide_overlay_gif, NULL);
-                            shift_tokens(f2);
-                            g_idle_add(update_ui_from_serial, NULL);
-                        }
-                        else if (f1 && strcmp(f1, "3") == 0) {
-                            g_idle_add(show_fullscreen_gif, (gpointer)"rolling.gif");
-                        }
-                    }
+                    if (f0 && strcmp(f0, ":01") == 0) {
+
+    // :01 1 <number>
+    if (f1 && strcmp(f1, "1") == 0 && f2) {
+        if (gif_playing)
+            g_idle_add(hide_overlay_gif, NULL);
+
+        shift_tokens(f2);
+        g_idle_add(update_ui_from_serial, NULL);
+    }
+
+    // :01 3  (example: rolling animation)
+   
+    
+}
+
 
                     // -------------------------
                     // FORMAT: $M commands
