@@ -376,7 +376,7 @@ static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
 static gboolean refresh_images_on_ui(gpointer user_data) {
     GdkPixbuf *pb1 = render_token_pixbuf(current_image, current_token, "Current Draw",
                                          "#FFDAB9", "#FF0000",
-                                         0.65, 0.12,
+                                         0.63, 0.10,
                                          "Liberation Sans Bold", "Liberation Sans");
 
     GdkPixbuf *pb2 = render_token_pixbuf(previous_image, previous_token, "Previous Draw",
@@ -420,7 +420,7 @@ static gboolean set_paned_ratios(gpointer user_data) {
 
     gtk_paned_set_position(GTK_PANED(top_pane), top_alloc.height * 0.11);
     gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.88);
-    gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.66);
+    gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.71);
     gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.70);
 
     gtk_widget_show(top_label);
