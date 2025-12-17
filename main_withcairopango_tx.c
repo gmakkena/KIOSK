@@ -662,42 +662,8 @@ static void *serial_reader_thread(void *arg) {
 }
 
 
-                    // -------------------------
-                    // FORMAT: $M commands
-                    // -------------------------
-                    else if (f0 && strcmp(f0, "$M") == 0) {
-                        if (f1) {
-                            if (!strcmp(f1, "G1")) {
-                                 system("mpv --really-quiet --no-terminal --no-input-default-bindings "
-       "--loop-playlist=no --fullscreen /home/pi/KIOSK/congratulations1.gif &");
-
-                                strcpy(current_token, "--");
-                                strcpy(previous_token, "--");
-                                strcpy(preceding_token, "--");
-                                g_idle_add(update_ui_from_serial, NULL);
-                            }
-                            else if (!strcmp(f1, "C1")) {
-                                system("mpv --really-quiet --no-terminal --no-input-default-bindings "
-       "--loop-playlist=no --fullscreen /home/pi/KIOSK/congratulations1.gif &");
-
-                            }
-                            else {
-                                g_idle_add(hide_overlay_gif, NULL);
-                            }
-                        }
-                    }
-
-                    // -------------------------
-                    // NORMAL TOKEN
-                    // -------------------------
-                    else if (f0) {
-                        system("killall -q mpv");
-
-                        //g_idle_add((GSourceFunc)refocus_main_window, window);
-                        shift_tokens(f0);
-                        g_idle_add(update_ui_from_serial, NULL);
-                    }
-
+                   
+                   
                 }
                 else if (pos + 1 < sizeof(buf)) {
                     buf[pos++] = c;
