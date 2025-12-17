@@ -371,12 +371,31 @@ static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
 }
 */
 
+#include <gtk/gtk.h>
+#include <cairo.h>
+#include <pango/pangocairo.h>
+
+/* ---------------------------------------------------------
+ * Helper: set cairo color from hex string "#RRGGBB"
+ * --------------------------------------------------------- */
+static void set_cairo_color(cairo_t *cr, const char *hex)
+{
+    unsigned r, g, b;
+    if (hex && sscanf(hex, "#%02x%02x%02x", &r, &g, &b) == 3) {
+        cairo_set_source_rgb(cr, r / 255.0, g / 255.0, b / 255.0);
+    }
+}
+
+/* ---------------------------------------------------------
+ * Render token image using Cairo + Pango
+ * --------------------------------------------------------- */
 static GdkPixbuf *
 render_token_pixbuf_cairo(GtkWidget *widget,
                           const char *number,
                           const char *label,
                           const char *bg_hex,
-                          const char *fg_hex,
+                          const char *num_hex,
+                          const char *lab_hex,
                           double number_size_frac,
                           double label_size_frac,
                           double number_x_frac,
@@ -386,54 +405,64 @@ render_token_pixbuf_cairo(GtkWidget *widget,
                           const char *num_font,
                           const char *lab_font)
 {
+    /* --- Determine render size --- */
     int w = gtk_widget_get_allocated_width(widget);
     int h = gtk_widget_get_allocated_height(widget);
-    if (w < 100 || h < 100) { w = 600; h = 300; }
 
-    cairo_surface_t *surf =
-        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
-    cairo_t *cr = cairo_create(surf);
-
-    /* -------- background -------- */
-    unsigned r, g, b;
-    double br=1, bg=1, bb=1;
-    if (sscanf(bg_hex, "#%02x%02x%02x", &r, &g, &b) == 3) {
-        br = r/255.0; bg = g/255.0; bb = b/255.0;
+    if (w < 100 || h < 100) {   // safe fallback before first layout
+        w = 600;
+        h = 300;
     }
-    cairo_set_source_rgb(cr, br, bg, bb);
+
+    /* --- Create Cairo surface --- */
+    cairo_surface_t *surface =
+        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    cairo_t *cr = cairo_create(surface);
+
+    /* --- Paint background --- */
+    set_cairo_color(cr, bg_hex);
     cairo_paint(cr);
 
-    /* -------- foreground color -------- */
-    double fr=1, fg=0, fb=0;
-    sscanf(fg_hex, "#%02x%02x%02x", &r, &g, &b);
-    fr = r/255.0; fg = g/255.0; fb = b/255.0;
-    cairo_set_source_rgb(cr, fr, fg, fb);
-
-    /* -------- number -------- */
+    /* --- Create Pango layout --- */
     PangoLayout *layout = pango_cairo_create_layout(cr);
-
+    int tw, th;
     char fontdesc[128];
-    snprintf(fontdesc, sizeof(fontdesc), "%s %d",
-             num_font, (int)(h * number_size_frac));
+
+    /* =====================================================
+     * Draw NUMBER
+     * ===================================================== */
+    set_cairo_color(cr, num_hex);
+
+    snprintf(fontdesc, sizeof(fontdesc),
+             "%s %d",
+             num_font,
+             (int)(h * number_size_frac));
+
     PangoFontDescription *fd_num =
         pango_font_description_from_string(fontdesc);
 
     pango_layout_set_font_description(layout, fd_num);
     pango_layout_set_text(layout, number ? number : "--", -1);
-
-    int tw, th;
     pango_layout_get_pixel_size(layout, &tw, &th);
 
     int cx = w / 2 + (int)(w * number_x_frac);
     int cy = h / 2 + (int)(h * number_y_frac);
 
-    cairo_move_to(cr, cx - tw/2, cy - th/2);
+    cairo_move_to(cr, cx - tw / 2, cy - th / 2);
     pango_cairo_show_layout(cr, layout);
+
     pango_font_description_free(fd_num);
 
-    /* -------- label -------- */
-    snprintf(fontdesc, sizeof(fontdesc), "%s %d",
-             lab_font, (int)(h * label_size_frac));
+    /* =====================================================
+     * Draw LABEL
+     * ===================================================== */
+    set_cairo_color(cr, lab_hex);
+
+    snprintf(fontdesc, sizeof(fontdesc),
+             "%s %d",
+             lab_font,
+             (int)(h * label_size_frac));
+
     PangoFontDescription *fd_lab =
         pango_font_description_from_string(fontdesc);
 
@@ -444,51 +473,60 @@ render_token_pixbuf_cairo(GtkWidget *widget,
     cx = w / 2 + (int)(w * label_x_frac);
     cy = h / 2 + (int)(h * label_y_frac);
 
-    cairo_move_to(cr, cx - tw/2, cy - th/2);
+    cairo_move_to(cr, cx - tw / 2, cy - th / 2);
     pango_cairo_show_layout(cr, layout);
 
     pango_font_description_free(fd_lab);
+
+    /* --- Cleanup layout --- */
     g_object_unref(layout);
 
-    cairo_surface_flush(surf);
-
+    /* --- Convert to GdkPixbuf --- */
+    cairo_surface_flush(surface);
     GdkPixbuf *pix =
-        gdk_pixbuf_get_from_surface(surf, 0, 0, w, h);
+        gdk_pixbuf_get_from_surface(surface, 0, 0, w, h);
 
+    /* --- Cleanup cairo --- */
     cairo_destroy(cr);
-    cairo_surface_destroy(surf);
+    cairo_surface_destroy(surface);
+
     return pix;
 }
-
 
 static gboolean refresh_images_on_ui(gpointer user_data) {
     GdkPixbuf *pb1 = render_token_pixbuf_cairo(current_image,
                               current_token,
                               "Current Draw",
-                              "#FFDAB9", "#FF0000",
-                              0.78, 0.18,
+                              "#FFDAB9",   // background
+                              "#FF0000",   // number (red)
+                              "#333333",   // label (dark gray)
+                              0.65, 0.15,
                               0.10, -0.07,
-                              0.05, 0.41,
+                              0.05,  0.41,
                               "Liberation Sans Bold",
                               "Liberation Sans");
 
     GdkPixbuf *pb2 = render_token_pixbuf_cairo(previous_image,
                               previous_token,
                               "Previous Draw",
-                              "#FFDAB9", "#0000FF",
-                              0.70, 0.10,      // smaller fonts
-                             -0.04, -0.03,     // number slightly left & up
-                             -0.06,  0.30,     // label left & down
+                              "#FFDAB9",   // background
+                              "#0000FF",   // number (blue)
+                              "#555555",   // label (muted gray)
+                              0.70, 0.10,  // smaller fonts
+                             -0.04, -0.03,
+                             -0.06,  0.30,
                               "Liberation Sans Bold",
                               "Liberation Sans");
 
     GdkPixbuf *pb3 = render_token_pixbuf_cairo(preceding_image,
                               preceding_token,
                               "Preceding Draw",
-                              "#FFDAB9", "#8B4513",
-                              0.92, 0.17,      // big number, clear label
-                             -0.08, -0.10,     // number up & left
-                             -0.05,  0.35,     // label below
+                              "#FFDAB9",   // background
+                              "#8B4513",   // number (brown)
+                              "#4F4F4F",   // label (dark gray)
+                              0.92, 0.17,  // large number
+                             -0.08, -0.10,
+                             -0.05,  0.35,
                               "Liberation Sans Bold",
                               "Liberation Sans");
 
