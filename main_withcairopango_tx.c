@@ -290,7 +290,7 @@ static gboolean show_fullscreen_gif(gpointer filename_ptr) {
 // ===========================================================
 //                TOKEN RENDERING (CAIRO + PANGO)
 // ===========================================================
-
+/*
 static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
                                      const char *number, const char *label,
                                      const char *bg_hex, const char *fg_hex,
@@ -369,25 +369,128 @@ static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
 
     return pix;
 }
+*/
 
+static GdkPixbuf *
+render_token_pixbuf_cairo(GtkWidget *widget,
+                          const char *number,
+                          const char *label,
+                          const char *bg_hex,
+                          const char *fg_hex,
+                          double number_size_frac,
+                          double label_size_frac,
+                          double number_x_frac,
+                          double number_y_frac,
+                          double label_x_frac,
+                          double label_y_frac,
+                          const char *num_font,
+                          const char *lab_font)
+{
+    int w = gtk_widget_get_allocated_width(widget);
+    int h = gtk_widget_get_allocated_height(widget);
+    if (w < 100 || h < 100) { w = 600; h = 300; }
 
+    cairo_surface_t *surf =
+        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    cairo_t *cr = cairo_create(surf);
+
+    /* -------- background -------- */
+    unsigned r, g, b;
+    double br=1, bg=1, bb=1;
+    if (sscanf(bg_hex, "#%02x%02x%02x", &r, &g, &b) == 3) {
+        br = r/255.0; bg = g/255.0; bb = b/255.0;
+    }
+    cairo_set_source_rgb(cr, br, bg, bb);
+    cairo_paint(cr);
+
+    /* -------- foreground color -------- */
+    double fr=1, fg=0, fb=0;
+    sscanf(fg_hex, "#%02x%02x%02x", &r, &g, &b);
+    fr = r/255.0; fg = g/255.0; fb = b/255.0;
+    cairo_set_source_rgb(cr, fr, fg, fb);
+
+    /* -------- number -------- */
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+
+    char fontdesc[128];
+    snprintf(fontdesc, sizeof(fontdesc), "%s %d",
+             num_font, (int)(h * number_size_frac));
+    PangoFontDescription *fd_num =
+        pango_font_description_from_string(fontdesc);
+
+    pango_layout_set_font_description(layout, fd_num);
+    pango_layout_set_text(layout, number ? number : "--", -1);
+
+    int tw, th;
+    pango_layout_get_pixel_size(layout, &tw, &th);
+
+    int cx = w / 2 + (int)(w * number_x_frac);
+    int cy = h / 2 + (int)(h * number_y_frac);
+
+    cairo_move_to(cr, cx - tw/2, cy - th/2);
+    pango_cairo_show_layout(cr, layout);
+    pango_font_description_free(fd_num);
+
+    /* -------- label -------- */
+    snprintf(fontdesc, sizeof(fontdesc), "%s %d",
+             lab_font, (int)(h * label_size_frac));
+    PangoFontDescription *fd_lab =
+        pango_font_description_from_string(fontdesc);
+
+    pango_layout_set_font_description(layout, fd_lab);
+    pango_layout_set_text(layout, label ? label : "", -1);
+    pango_layout_get_pixel_size(layout, &tw, &th);
+
+    cx = w / 2 + (int)(w * label_x_frac);
+    cy = h / 2 + (int)(h * label_y_frac);
+
+    cairo_move_to(cr, cx - tw/2, cy - th/2);
+    pango_cairo_show_layout(cr, layout);
+
+    pango_font_description_free(fd_lab);
+    g_object_unref(layout);
+
+    cairo_surface_flush(surf);
+
+    GdkPixbuf *pix =
+        gdk_pixbuf_get_from_surface(surf, 0, 0, w, h);
+
+    cairo_destroy(cr);
+    cairo_surface_destroy(surf);
+    return pix;
+}
 
 
 static gboolean refresh_images_on_ui(gpointer user_data) {
-    GdkPixbuf *pb1 = render_token_pixbuf(current_image, current_token, "Current Draw",
-                                         "#FFDAB9", "#FF0000",
-                                         0.63, 0.10,
-                                         "Liberation Sans Bold", "Liberation Sans");
+    GdkPixbuf *pb1 = render_token_pixbuf_cairo(current_image,
+                              current_token,
+                              "Current Draw",
+                              "#FFDAB9", "#FF0000",
+                              0.78, 0.18,
+                              0.10, -0.07,
+                              0.05, 0.41,
+                              "Liberation Sans Bold",
+                              "Liberation Sans");
 
-    GdkPixbuf *pb2 = render_token_pixbuf(previous_image, previous_token, "Previous Draw",
-                                         "#FFDAB9", "#0000FF",
-                                         0.50, 0.08,
-                                         "Liberation Sans Bold", "Liberation Sans");
+    GdkPixbuf *pb2 = render_token_pixbuf_cairo(previous_image,
+                              previous_token,
+                              "Previous Draw",
+                              "#FFDAB9", "#0000FF",
+                              0.70, 0.10,      // smaller fonts
+                             -0.04, -0.03,     // number slightly left & up
+                             -0.06,  0.30,     // label left & down
+                              "Liberation Sans Bold",
+                              "Liberation Sans");
 
-    GdkPixbuf *pb3 = render_token_pixbuf(preceding_image, preceding_token, "Preceding Draw",
-                                         "#FFDAB9", "#8B4513",
-                                         0.60, 0.12,
-                                         "Liberation Sans Bold", "Liberation Sans");
+    GdkPixbuf *pb3 = render_token_pixbuf_cairo(preceding_image,
+                              preceding_token,
+                              "Preceding Draw",
+                              "#FFDAB9", "#8B4513",
+                              0.92, 0.17,      // big number, clear label
+                             -0.08, -0.10,     // number up & left
+                             -0.05,  0.35,     // label below
+                              "Liberation Sans Bold",
+                              "Liberation Sans");
 
     if (pb1) { gtk_image_set_from_pixbuf(GTK_IMAGE(current_image), pb1); g_object_unref(pb1); }
     if (pb2) { gtk_image_set_from_pixbuf(GTK_IMAGE(previous_image), pb2); g_object_unref(pb2); }
