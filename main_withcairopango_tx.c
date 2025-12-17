@@ -524,9 +524,9 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
                               "#FFDAB9",   // background
                               "#8B4513",   // number (brown)
                               "#4F4F4F",   // label (dark gray)
-                              0.65, 0.13,  // large number
+                              0.65, 0.11,  // large number
                              -0.08, -0.03,
-                             -0.05,  0.1,
+                             -0.05,  0.6,
                               "Liberation Sans Bold",
                               "Liberation Sans");
 
