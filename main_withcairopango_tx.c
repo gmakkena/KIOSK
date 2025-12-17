@@ -424,8 +424,8 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.70);
 
     gtk_widget_show(top_label);
-    gtk_widget_show(ticker_fixed);
-    gtk_widget_show(ticker_label);
+    //gtk_widget_show(ticker_fixed);
+    //gtk_widget_show(ticker_label);
 
     int top_font_size = (int)(outermost_alloc.height * 0.08 * 0.9 * PANGO_SCALE);
     int ticker_font_size = (int)(outermost_alloc.height * 0.045 * 0.9 * PANGO_SCALE);
