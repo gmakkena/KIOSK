@@ -95,6 +95,26 @@ static GdkPixbuf *render_token(const char *num, const char *label,
     cairo_surface_destroy(s);
     return pb;
 }
+static void reset_all_tokens(void)
+{
+    strncpy(current_token, "--", sizeof(current_token));
+    strncpy(previous_token, "--", sizeof(previous_token));
+    strncpy(preceding_token, "--", sizeof(preceding_token));
+}
+static gboolean game_over_timeout_cb(gpointer user_data)
+{
+    // Hide overlay (GAME OVER)
+    g_idle_add(hide_overlay_gif, NULL);   // reuse your existing hide
+
+    // Reset tokens
+    reset_all_tokens();
+
+    // Refresh UI
+    g_idle_add(update_ui_from_serial, NULL);
+
+    return G_SOURCE_REMOVE;   // run once only
+}
+
 
 static void refresh_tokens(void)
 {
@@ -214,7 +234,13 @@ static void *serial_thread(void *d)
                      f1 && !strcmp(f1,"1") &&
                      f2 && !strcmp(f2,"6A")) {
 
-                g_idle_add(show_game_over,NULL);
+                // Show GAME OVER overlay
+    g_idle_add(show_game_over, NULL);
+
+    // Start 5-second timer
+    g_timeout_add_seconds(5, game_over_timeout_cb, NULL);
+
+    continue;
             }
         }
         else if (pos < sizeof(buf)-1) {
