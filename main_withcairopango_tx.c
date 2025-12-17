@@ -565,8 +565,8 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.65);
 
     gtk_widget_show(top_label);
-    //gtk_widget_show(ticker_fixed);
-    //gtk_widget_show(ticker_label);
+    gtk_widget_show(ticker_fixed);
+    gtk_widget_show(ticker_label);
 
     int top_font_size = (int)(outermost_alloc.height * 0.08 * 0.9 * PANGO_SCALE);
     int ticker_font_size = (int)(outermost_alloc.height * 0.045 * 0.9 * PANGO_SCALE);
@@ -809,8 +809,8 @@ int main(int argc, char *argv[]) {
     gtk_widget_hide(gif_area);
 
     // Optional: hide ticker initially
-    gtk_widget_hide(ticker_fixed);
-    gtk_widget_hide(ticker_label);
+   // gtk_widget_hide(ticker_fixed);
+    //gtk_widget_hide(ticker_label);
 
 
     // ---------------- Start Background Threads ----------------
