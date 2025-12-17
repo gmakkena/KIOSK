@@ -522,7 +522,7 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
                               preceding_token,
                               "Preceding Draw",
                               "#FFDAB9",   // background
-                              "#8B4513",   // number (brown)
+                              "#3E2723 ",   // number (brown)
                               "#4F4F4F",   // label (dark gray)
                               0.65, 0.11,  // large number
                              -0.08, -0.03,
