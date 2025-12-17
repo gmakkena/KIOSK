@@ -501,7 +501,7 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
                               "#FF0000",   // number (red)
                               "#333333",   // label (dark gray)
                               0.65, 0.15,
-                              -0.10, 0.05,
+                              -0.08, 0.05,
                               -0.05,  0.41,
                               "Liberation Sans Bold",
                               "Liberation Sans");
