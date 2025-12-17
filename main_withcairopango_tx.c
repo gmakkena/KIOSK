@@ -420,7 +420,7 @@ static gboolean set_paned_ratios(gpointer user_data) {
 
     gtk_paned_set_position(GTK_PANED(top_pane), top_alloc.height * 0.11);
     gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.88);
-    gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.71);
+    gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.66);
     gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.70);
 
     gtk_widget_show(top_label);
