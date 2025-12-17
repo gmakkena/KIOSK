@@ -381,7 +381,7 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
 
     GdkPixbuf *pb2 = render_token_pixbuf(previous_image, previous_token, "Previous Draw",
                                          "#FFDAB9", "#0000FF",
-                                         0.45, 0.08,
+                                         0.49, 0.08,
                                          "Liberation Sans Bold", "Liberation Sans");
 
     GdkPixbuf *pb3 = render_token_pixbuf(preceding_image, preceding_token, "Preceding Draw",
