@@ -445,7 +445,7 @@ static gboolean set_paned_ratios(gpointer user_data) {
 
     char markup_ticker[256];
     snprintf(markup_ticker, sizeof(markup_ticker),
-             "<span font_family='Arial' weight='bold' size='%d' foreground='#2F4F4F'>Aurum Smart Tech</span>",
+             "<span font_family='Arial' weight='bold' size='%d' foreground='#2F4F4F'></span>",
              ticker_font_size);
 
     gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
