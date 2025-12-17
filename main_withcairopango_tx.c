@@ -376,7 +376,7 @@ static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
 static gboolean refresh_images_on_ui(gpointer user_data) {
     GdkPixbuf *pb1 = render_token_pixbuf(current_image, current_token, "Current Draw",
                                          "#FFDAB9", "#FF0000",
-                                         0.65, 0.13,
+                                         0.65, 0.12,
                                          "Liberation Sans Bold", "Liberation Sans");
 
     GdkPixbuf *pb2 = render_token_pixbuf(previous_image, previous_token, "Previous Draw",
@@ -448,7 +448,7 @@ static gboolean set_paned_ratios(gpointer user_data) {
              "<span font_family='Arial' weight='bold' size='%d' foreground='#2F4F4F'></span>",
              ticker_font_size);
 
-    gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
+   // gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
 
     g_idle_add(refresh_images_on_ui, NULL);
 
