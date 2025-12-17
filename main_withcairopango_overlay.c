@@ -15,6 +15,10 @@
 // ==========================================================
 // GLOBALS
 // ==========================================================
+static gboolean hide_overlay_gif(gpointer user_data);
+static gboolean update_ui_from_serial(gpointer user_data);
+static gboolean show_game_over(gpointer user_data);
+static gboolean game_over_timeout_cb(gpointer user_data);
 
 GtkWidget *window;
 GtkWidget *overlay;
