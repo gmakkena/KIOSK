@@ -659,41 +659,7 @@ static void *serial_reader_thread(void *arg) {
 
 }
 
-if (f0 && strcmp(f0, ":03") == 0) {
 
-    // :03 1 6A → switch to tty2
-    if (f1 && strcmp(f1, "1") == 0 &&
-        f2 && strcmp(f2, "6A") == 0) {
-
-        /* switch to tty2 */
-        system("chvt 2");
-
-        /* cancel previous timer if any */
-        if (tty_return_timer) {
-            g_source_remove(tty_return_timer);
-            tty_return_timer = 0;
-        }
-
-        /* return to tty1 after 10 seconds */
-        tty_return_timer = g_timeout_add_seconds(
-            10,
-            (GSourceFunc) ({
-                gboolean _cb(gpointer d) {
-                    system("chvt 1");
-                    tty_return_timer = 0;
-                    return G_SOURCE_REMOVE;
-                }
-                _cb;
-            }),
-            NULL
-        );
-    }
-}
-
-
-                   
-                   
-                }
                 else if (pos + 1 < sizeof(buf)) {
                     buf[pos++] = c;
                 }
