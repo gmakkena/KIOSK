@@ -660,6 +660,9 @@ static void *serial_reader_thread(void *arg) {
 }
 
 
+                   
+                   
+                }
                 else if (pos + 1 < sizeof(buf)) {
                     buf[pos++] = c;
                 }
