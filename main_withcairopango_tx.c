@@ -569,7 +569,7 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_widget_show(ticker_label);
 
     int top_font_size = (int)(outermost_alloc.height * 0.08 * 0.9 * PANGO_SCALE);
-    int ticker_font_size = (int)(outermost_alloc.height * 0.045 * 0.9 * PANGO_SCALE);
+    int ticker_font_size = (int)(outermost_alloc.height * 0.042 * 0.9 * PANGO_SCALE);
 
     const char *plain = gtk_label_get_text(GTK_LABEL(top_label));
     if (!plain) plain = "";
@@ -648,19 +648,31 @@ static void *serial_reader_thread(void *arg) {
                     // -------------------------
                     if (f0 && strcmp(f0, ":01") == 0) {
 
-    // :01 1 <number>
-    if (f1 && strcmp(f1, "1") == 0 && f2) {
-        if (gif_playing)
-            g_idle_add(hide_overlay_gif, NULL);
+                         if (f1 && strcmp(f1, "1") == 0 && f2) {
+                                if (gif_playing)
+                                 g_idle_add(hide_overlay_gif, NULL);
 
-        shift_tokens(f2);
-        g_idle_add(update_ui_from_serial, NULL);
+                                shift_tokens(f2);
+                                g_idle_add(update_ui_from_serial, NULL);
+                        }
+                    }
+                   else if (f0 && strcmp(f0, ":03") == 0) {
+
+    if (f1 && strcmp(f1, "1") == 0 &&
+        f2 && strcmp(f2, "5A") == 0) {
+
+       gtk_widget_set_opacity(ticker_label, 0.0);
     }
-
 }
+else if (f0 && strcmp(f0, ":03") == 0) {
 
+    if (f1 && strcmp(f1, "1") == 0 &&
+        f2 && strcmp(f2, "5B") == 0) {
 
-                   
+        gtk_widget_set_opacity(ticker_label, 1.0);
+    }
+}
+                }   
                    
                 }
                 else if (pos + 1 < sizeof(buf)) {
