@@ -730,15 +730,16 @@ static void *serial_reader_thread(void *arg)
                         /* ---------- GAME OVER ---------- */
                         if (strcmp(f2, "6A") == 0) {
 
+                            clear_tokens();
                             tty2_active = TRUE;
 
                             clear_tokens();
                             g_idle_add(update_ui_from_serial, NULL);
 
                             system(
-                                "echo 'loadfile /home/pi/KIOSK/gameover.gif replace' "
-                                "| socat - /tmp/mpv.sock"
-                            );
+    "printf \"stop\\nloadfile /home/pi/KIOSK/gameover.gif replace\\n\" "
+    "| socat - /tmp/mpv.sock"
+);
 
                             system("chvt 2");
                         }
@@ -749,9 +750,9 @@ static void *serial_reader_thread(void *arg)
                             tty2_active = TRUE;
 
                             system(
-                                "echo 'loadfile /home/pi/KIOSK/congratulations.gif replace' "
-                                "| socat - /tmp/mpv.sock"
-                            );
+    "printf \"stop\\nloadfile /home/pi/KIOSK/congratulations.gif replace\\n\" "
+    "| socat - /tmp/mpv.sock"
+);
 
                             system("chvt 2");
                         }
