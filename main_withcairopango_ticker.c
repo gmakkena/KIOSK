@@ -513,13 +513,11 @@ render_token_pixbuf_cairo(GtkWidget *widget,
     return pix;
 }
 
-gboolean animate_ticker(gpointer data)
-{
+gboolean animate_ticker(gpointer data) {
     ticker_x -= 2;
 
-    /* Wrap BEFORE fully leaving screen */
-    if (ticker_x < -ticker_width)
-        ticker_x = 0;   // ← NOT ticker_area_width
+    if (ticker_x + ticker_width < 0)
+        ticker_x = ticker_area_width;
 
     gtk_fixed_move(GTK_FIXED(ticker_fixed), ticker_label, ticker_x, 0);
     return G_SOURCE_CONTINUE;
@@ -527,20 +525,28 @@ gboolean animate_ticker(gpointer data)
 
 
 gboolean finalize_ticker_setup(gpointer data) {
-    ticker_width = gtk_widget_get_allocated_width(ticker_label);
     ticker_area_width = gtk_widget_get_allocated_width(ticker_fixed);
+    
+    // Force ticker_fixed to not resize based on child
+    gtk_widget_set_size_request(ticker_fixed, ticker_area_width, 60);
+    
+    // Get label width AFTER it's measured
+    ticker_width = gtk_widget_get_allocated_width(ticker_label);
 
     if (ticker_width <= 1 || ticker_area_width <= 1)
         return G_SOURCE_CONTINUE;
 
+    // Start completely off-screen to the right
     ticker_x = ticker_area_width;
+    
+    // Lock label size so it doesn't request more space
+    gtk_widget_set_size_request(ticker_label, ticker_width, 60);
 
     if (ticker_timer_id == 0)
         ticker_timer_id = g_timeout_add(30, animate_ticker, NULL);
 
     return G_SOURCE_REMOVE;
 }
-
 
 static gboolean refresh_images_on_ui(gpointer user_data) {
     GdkPixbuf *pb1 = render_token_pixbuf_cairo(current_image,
