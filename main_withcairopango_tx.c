@@ -18,6 +18,8 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 // ===================== GLOBAL SERIAL =====================
 int serial_fd = -1;
 pthread_mutex_t serial_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -37,8 +39,7 @@ GtkWidget *top_pane, *outermost, *outer, *inner;
 GtkWidget *ticker_fixed, *ticker_label;
 GtkWidget *gif_area = NULL;
 static gboolean tty2_active = FALSE;
-static gboolean tty2_active = FALSE;
-static gboolean tty4_active = FALSE;
+
 
 
 // ===================== GIF Player Struct =====================
@@ -635,24 +636,29 @@ static gboolean show_ticker_cb(gpointer data)
     gtk_widget_set_opacity(ticker_label, 1.0);
     return G_SOURCE_REMOVE;
 }
+#include <sys/socket.h>
+#include <sys/un.h>
 
-static void switch_vt(int vt)
+static void mpv_load_gif(const char *gif)
 {
-    int fd = open("/dev/console", O_RDWR);
-    if (fd < 0) {
-        perror("open /dev/console failed");
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0)
         return;
+
+    struct sockaddr_un addr = {0};
+    addr.sun_family = AF_UNIX;
+    strcpy(addr.sun_path, "/tmp/mpv.sock");
+
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd),
+                 "loadfile %s replace\n", gif);
+        write(fd, cmd, strlen(cmd));
     }
 
-    if (ioctl(fd, VT_ACTIVATE, vt) < 0)
-        perror("VT_ACTIVATE failed");
-
-    if (ioctl(fd, VT_WAITACTIVE, vt) < 0)
-        perror("VT_WAITACTIVE failed");
-
     close(fd);
-
 }
+
 // ===========================================================
 //                SERIAL READER THREAD (MAIN LOGIC)
 // ===========================================================
@@ -663,9 +669,11 @@ static void *serial_reader_thread(void *arg)
     char rbuf[64];
 
     while (1) {
+
         int n = read(serial_fd, rbuf, sizeof(rbuf));
 
         if (n > 0) {
+
             for (int i = 0; i < n; i++) {
 
                 char c = rbuf[i];
@@ -689,60 +697,61 @@ static void *serial_reader_thread(void *arg)
                     /*
                      * FORMAT:
                      * :00 1 <token>
-                     * :00 3 6A   → game over (tty2)
-                     * :00 3 7A   → congratulations (tty4)
-                     * :00 3 7B   → exit congratulations
+                     * :00 3 6A  → GAME OVER (gameover.gif)
+                     * :00 3 7A  → CONGRATS (congratulations.gif)
                      */
 
-                    /* ---------- TOKEN UPDATE ---------- */
+                    /* ==================================================
+                     * TOKEN UPDATE
+                     * ================================================== */
                     if (f0 && strcmp(f0, ":00") == 0 &&
                         f1 && strcmp(f1, "1") == 0 &&
                         f2)
                     {
-                        /* Return from any overlay VT */
-                        if (tty2_active || tty4_active) {
-                            system("/usr/local/bin/vt-switch.sh 1");
+                        /* If we were on tty2, return to tty1 */
+                        if (tty2_active) {
+                            system("chvt 1");
                             tty2_active = FALSE;
-                            tty4_active = FALSE;
                         }
 
                         shift_tokens(f2);
                         g_idle_add(update_ui_from_serial, NULL);
                     }
 
-                    /* ---------- CONTROL COMMANDS ---------- */
+                    /* ==================================================
+                     * CONTROL COMMANDS
+                     * ================================================== */
                     else if (f0 && strcmp(f0, ":00") == 0 &&
                              f1 && strcmp(f1, "3") == 0 &&
                              f2)
                     {
-                        /* GAME OVER → tty2 (destructive) */
+                        /* ---------- GAME OVER ---------- */
                         if (strcmp(f2, "6A") == 0) {
 
                             tty2_active = TRUE;
-                            tty4_active = FALSE;
 
-                            clear_tokens();                  // only here
+                            clear_tokens();
                             g_idle_add(update_ui_from_serial, NULL);
 
-                            system("/usr/local/bin/vt-switch.sh 2");
+                            system(
+                                "echo 'loadfile /home/pi/KIOSK/gameover.gif replace' "
+                                "| socat - /tmp/mpv.sock"
+                            );
+
+                            system("chvt 2");
                         }
 
-                        /* CONGRATULATIONS → tty4 (non-destructive) */
+                        /* ---------- CONGRATULATIONS ---------- */
                         else if (strcmp(f2, "7A") == 0) {
 
-                            tty4_active = TRUE;
-                            tty2_active = FALSE;
+                            tty2_active = TRUE;
 
-                            system("/usr/local/bin/vt-switch.sh 4");
-                        }
+                            system(
+                                "echo 'loadfile /home/pi/KIOSK/congratulations.gif replace' "
+                                "| socat - /tmp/mpv.sock"
+                            );
 
-                        /* EXIT CONGRATULATIONS → back to tty1 */
-                        else if (strcmp(f2, "7B") == 0) {
-
-                            if (tty4_active) {
-                                system("/usr/local/bin/vt-switch.sh 1");
-                                tty4_active = FALSE;
-                            }
+                            system("chvt 2");
                         }
                     }
                 }
@@ -750,7 +759,8 @@ static void *serial_reader_thread(void *arg)
                     buf[pos++] = c;
                 }
             }
-        } else {
+        }
+        else {
             usleep(20000);
         }
     }

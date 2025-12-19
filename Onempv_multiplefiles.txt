@@ -1,0 +1,36 @@
+sudo nano /usr/local/bin/mpv-tty2.sh
+
+
+#!/bin/bash
+
+# Ensure socket does not already exist
+rm -f /tmp/mpv.sock
+
+# Switch to tty2
+chvt 2
+
+# Start mpv
+exec /usr/bin/mpv \
+  --really-quiet \
+  --loop-file=inf \
+  --no-audio \
+  --vo=drm \
+  --input-ipc-server=/tmp/mpv.sock \
+  /home/pi/KIOSK/gameover.gif &
+
+MPV_PID=$!
+
+# Wait for socket to appear
+while [ ! -S /tmp/mpv.sock ]; do
+    sleep 0.1
+done
+
+# FIX PERMISSIONS (this is the missing piece)
+chmod 666 /tmp/mpv.sock
+
+wait $MPV_PID
+
+
+sudo chmod +x /usr/local/bin/mpv-tty2.sh
+sudo systemctl restart getty@tty2
+ls -l /tmp/mpv.sock.   -> this is for testing
