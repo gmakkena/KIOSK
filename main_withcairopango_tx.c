@@ -752,26 +752,16 @@ static void *serial_reader_thread(void *arg)
 
                             tty2_active = TRUE;
 
-             system(
-    "printf \"playlist-clear\\n"
-    "loadfile /home/pi/KIOSK/congratulations.gif replace\\n\" "
-    "| socat - /tmp/mpv.sock"
-);
+             
 
-
-
-                            system("chvt 2");
+                            system("sudo chvt 4");
                         }
 
                         /* ---------- EXIT OVERLAY ---------- */
                         else if (strcmp(f2, "7B") == 0) {
 
                             if (tty2_active) {
-                                system(
-    "printf \"playlist-clear\\n"
-    "loadfile /home/pi/KIOSK/black.mp4 replace\\n\" "
-    "| socat - /tmp/mpv.sock"
-);
+                               
                                 system("chvt 1");
                                 tty2_active = FALSE;
                             }
