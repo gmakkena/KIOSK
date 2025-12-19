@@ -628,7 +628,6 @@ static void *serial_reader_thread(void *arg)
     char buf[256];
     size_t pos = 0;
     char rbuf[64];
-    static guint tty_return_timer = 0;
 
     while (1) {
         int n = read(serial_fd, rbuf, sizeof(rbuf));
@@ -656,34 +655,41 @@ static void *serial_reader_thread(void *arg)
                     char *f1 = strtok_r(NULL, " ", &save);
                     char *f2 = strtok_r(NULL, " ", &save);
 
-                    /* -------------------------
+                    /*
                      * FORMAT:
-                     * :01 1 <value>
-                     * :03 1 5A
-                     * :03 1 5B
-                     * ------------------------- */
+                     * :00 1 <token>
+                     * :00 3 6A
+                     * :00 3 5A
+                     * :00 3 5B
+                     */
 
-                    if (f0 && strcmp(f0, ":01") == 0) {
+                    /* ---------- TOKEN UPDATE ---------- */
+                    if (f0 && strcmp(f0, ":00") == 0 &&
+                        f1 && strcmp(f1, "1") == 0 &&
+                        f2)
+                    {
+                        if (gif_playing)
+                            g_idle_add(hide_overlay_gif, NULL);
 
-                        if (f1 && strcmp(f1, "1") == 0 && f2) {
-
-                            if (gif_playing)
-                                g_idle_add(hide_overlay_gif, NULL);
-
-                            shift_tokens(f2);
-                            g_idle_add(update_ui_from_serial, NULL);
-                        }
+                        shift_tokens(f2);
+                        g_idle_add(update_ui_from_serial, NULL);
                     }
-                    else if (f0 && strcmp(f0, ":03") == 0) {
 
-                        if (f1 && strcmp(f1, "1") == 0 &&
-                            f2 && strcmp(f2, "5A") == 0) {
-
+                    /* ---------- CONTROL COMMANDS ---------- */
+                    else if (f0 && strcmp(f0, ":00") == 0 &&
+                             f1 && strcmp(f1, "3") == 0 &&
+                             f2)
+                    {
+                        /* Show GIF */
+                        if (strcmp(f2, "6A") == 0) {
+                            g_idle_add(show_fullscreen_gif, "congratulations.gif");
+                        }
+                        /* Hide ticker */
+                        else if (strcmp(f2, "5A") == 0) {
                             g_idle_add(hide_ticker_cb, NULL);
                         }
-                        else if (f1 && strcmp(f1, "1") == 0 &&
-                                 f2 && strcmp(f2, "5B") == 0) {
-
+                        /* Show ticker */
+                        else if (strcmp(f2, "5B") == 0) {
                             g_idle_add(show_ticker_cb, NULL);
                         }
                     }
@@ -692,15 +698,13 @@ static void *serial_reader_thread(void *arg)
                     buf[pos++] = c;
                 }
             }
-        }
-        else {
+        } else {
             usleep(20000);
         }
     }
 
     return NULL;
 }
-
 
 // ===========================================================
 //            SERIAL TX THREAD (every 1 second)
