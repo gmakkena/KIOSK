@@ -547,6 +547,9 @@ gboolean finalize_ticker_setup(gpointer data) {
 
     return G_SOURCE_REMOVE;
 }
+
+
+
 static gboolean refresh_images_on_ui(gpointer user_data) {
     GdkPixbuf *pb1 = render_token_pixbuf_cairo(current_image,
                               current_token,
@@ -662,43 +665,47 @@ static gboolean set_paned_ratios(gpointer user_data) {
 }
 
 static void isolate_ticker_with_overlay(void) {
-    // Get ticker's current parent
     GtkWidget *old_parent = gtk_widget_get_parent(ticker_fixed);
     if (!old_parent) return;
     
-    // Get the window's main child (should be top_pane)
     GtkWidget *window_child = gtk_bin_get_child(GTK_BIN(window));
     
-    // Create overlay
     GtkWidget *overlay = gtk_overlay_new();
     
-    // Reparent existing content to overlay base
     g_object_ref(window_child);
     gtk_container_remove(GTK_CONTAINER(window), window_child);
     gtk_container_add(GTK_CONTAINER(overlay), window_child);
     g_object_unref(window_child);
     
-    // Create eventbox wrapper for ticker (for clipping)
-    GtkWidget *ticker_box = gtk_event_box_new();
-    gtk_widget_set_valign(ticker_box, GTK_ALIGN_START);
-    gtk_widget_set_margin_top(ticker_box, 80);  // Position below top label
-    gtk_widget_set_size_request(ticker_box, -1, 60);
+    // Use a fixed container for precise positioning
+    GtkWidget *ticker_box = gtk_fixed_new();
     
-    // Move ticker to overlay
+    // Move ticker to new container
     g_object_ref(ticker_fixed);
     gtk_container_remove(GTK_CONTAINER(old_parent), ticker_fixed);
-    gtk_container_add(GTK_CONTAINER(ticker_box), ticker_fixed);
+    
+    // Get screen dimensions
+    GdkScreen *screen = gdk_screen_get_default();
+    int screen_height = gdk_screen_get_height(screen);
+    int screen_width = gdk_screen_get_width(screen);
+    
+    // Position at 85% down the screen (matching your paned ratio)
+    int ticker_y = (int)(screen_height * 0.85);
+    
+    gtk_fixed_put(GTK_FIXED(ticker_box), ticker_fixed, 0, ticker_y);
+    gtk_widget_set_size_request(ticker_fixed, screen_width, 60);
     g_object_unref(ticker_fixed);
     
-    // Add ticker to overlay
+    // Add to overlay
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), ticker_box);
     gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(overlay), ticker_box, TRUE);
     
-    // Put overlay in window
     gtk_container_add(GTK_CONTAINER(window), overlay);
     
     gtk_widget_show_all(overlay);
 }
+
+
 // ===========================================================
 //                        TOKEN LOGIC
 // ===========================================================
