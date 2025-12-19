@@ -741,7 +741,7 @@ static void *serial_reader_thread(void *arg)
     "stop\n"
     "playlist-clear\n"
     "loadfile /home/pi/KIOSK/black.mp4 replace\n"
-    "loadfile /home/pi/KIOSK/congratulations.gif replace\n"
+    "loadfile /home/pi/KIOSK/gameover.gif replace\n"
     "\" | socat - /tmp/mpv.sock"
 );
 
