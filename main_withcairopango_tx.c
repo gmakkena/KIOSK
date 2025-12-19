@@ -674,14 +674,14 @@ static void *serial_reader_thread(void *arg) {
         g_idle_add(hide_ticker_cb, NULL);
     }
 }
-else if (f0 && strcmp(f0, ":03") == 0) {
 
-    if (f1 && strcmp(f1, "1") == 0 &&
+
+else    if (f1 && strcmp(f1, "1") == 0 &&
         f2 && strcmp(f2, "5B") == 0) {
 
         g_idle_add(show_ticker_cb, NULL);
     }
-}
+
                 }   
                    
                 }
