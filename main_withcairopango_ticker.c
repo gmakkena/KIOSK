@@ -663,6 +663,7 @@ static gboolean set_paned_ratios(gpointer user_data) {
     g_timeout_add(100, finalize_ticker_setup, NULL);
     return G_SOURCE_REMOVE;
 }
+
 static void isolate_ticker_with_overlay(void) {
     GtkWidget *old_parent = gtk_widget_get_parent(ticker_fixed);
     if (!old_parent) return;
@@ -676,19 +677,35 @@ static void isolate_ticker_with_overlay(void) {
     gtk_container_add(GTK_CONTAINER(overlay), window_child);
     g_object_unref(window_child);
     
-    // Create eventbox wrapper for ticker (for clipping)
+    // Create invisible placeholder to maintain paned structure
+    GtkWidget *placeholder = gtk_event_box_new();
+    gtk_widget_set_size_request(placeholder, -1, 60);
+    gtk_widget_set_opacity(placeholder, 0.0);  // Invisible
+    
+    // Replace ticker with placeholder in original parent
+    g_object_ref(ticker_fixed);
+    gtk_container_remove(GTK_CONTAINER(old_parent), ticker_fixed);
+    
+    // Add placeholder where ticker was
+    if (GTK_IS_PANED(old_parent)) {
+        gtk_paned_pack2(GTK_PANED(old_parent), placeholder, FALSE, FALSE);
+    } else if (GTK_IS_CONTAINER(old_parent)) {
+        gtk_container_add(GTK_CONTAINER(old_parent), placeholder);
+    }
+    
+    gtk_widget_show(placeholder);
+    
+    // Create eventbox wrapper for ticker overlay (for clipping)
     GtkWidget *ticker_box = gtk_event_box_new();
     gtk_widget_set_valign(ticker_box, GTK_ALIGN_END);  // Bottom of screen
     gtk_widget_set_halign(ticker_box, GTK_ALIGN_FILL);  // Full width
     gtk_widget_set_size_request(ticker_box, -1, 60);
     
-    // Move ticker to overlay
-    g_object_ref(ticker_fixed);
-    gtk_container_remove(GTK_CONTAINER(old_parent), ticker_fixed);
+    // Add ticker to overlay box
     gtk_container_add(GTK_CONTAINER(ticker_box), ticker_fixed);
     g_object_unref(ticker_fixed);
     
-    // Add ticker to overlay
+    // Add ticker overlay to main overlay
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), ticker_box);
     gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(overlay), ticker_box, TRUE);
     
@@ -697,7 +714,6 @@ static void isolate_ticker_with_overlay(void) {
     
     gtk_widget_show_all(overlay);
 }
-
 // ===========================================================
 //                        TOKEN LOGIC
 // ===========================================================
