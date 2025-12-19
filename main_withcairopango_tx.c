@@ -623,8 +623,8 @@ static gboolean show_ticker_cb(gpointer data)
 // ===========================================================
 //                SERIAL READER THREAD (MAIN LOGIC)
 // ===========================================================
-
-static void *serial_reader_thread(void *arg) {
+static void *serial_reader_thread(void *arg)
+{
     char buf[256];
     size_t pos = 0;
     char rbuf[64];
@@ -640,50 +640,53 @@ static void *serial_reader_thread(void *arg) {
 
                 if (c == '\r' || c == '\n') {
 
-                    if (pos == 0) continue;
+                    if (pos == 0)
+                        continue;
 
                     buf[pos] = '\0';
                     pos = 0;
 
+                    /* Trim leading spaces */
                     char *p = buf;
-                    while (*p == ' ') p++;
+                    while (*p == ' ')
+                        p++;
 
                     char *save = NULL;
                     char *f0 = strtok_r(p, " ", &save);
                     char *f1 = strtok_r(NULL, " ", &save);
                     char *f2 = strtok_r(NULL, " ", &save);
 
-                    // -------------------------
-                    // FORMAT: : X 1 VALUE
-                    // -------------------------
+                    /* -------------------------
+                     * FORMAT:
+                     * :01 1 <value>
+                     * :03 1 5A
+                     * :03 1 5B
+                     * ------------------------- */
+
                     if (f0 && strcmp(f0, ":01") == 0) {
 
-                         if (f1 && strcmp(f1, "1") == 0 && f2) {
-                                if (gif_playing)
-                                 g_idle_add(hide_overlay_gif, NULL);
+                        if (f1 && strcmp(f1, "1") == 0 && f2) {
 
-                                shift_tokens(f2);
-                                g_idle_add(update_ui_from_serial, NULL);
+                            if (gif_playing)
+                                g_idle_add(hide_overlay_gif, NULL);
+
+                            shift_tokens(f2);
+                            g_idle_add(update_ui_from_serial, NULL);
                         }
                     }
-                   else if (f0 && strcmp(f0, ":03") == 0) {
+                    else if (f0 && strcmp(f0, ":03") == 0) {
 
-    if (f1 && strcmp(f1, "1") == 0 &&
-        f2 && strcmp(f2, "5A") == 0) {
+                        if (f1 && strcmp(f1, "1") == 0 &&
+                            f2 && strcmp(f2, "5A") == 0) {
 
-        g_idle_add(hide_ticker_cb, NULL);
-    }
-}
+                            g_idle_add(hide_ticker_cb, NULL);
+                        }
+                        else if (f1 && strcmp(f1, "1") == 0 &&
+                                 f2 && strcmp(f2, "5B") == 0) {
 
-
-else    if (f1 && strcmp(f1, "1") == 0 &&
-        f2 && strcmp(f2, "5B") == 0) {
-
-        g_idle_add(show_ticker_cb, NULL);
-    }
-
-                }   
-                   
+                            g_idle_add(show_ticker_cb, NULL);
+                        }
+                    }
                 }
                 else if (pos + 1 < sizeof(buf)) {
                     buf[pos++] = c;
@@ -697,6 +700,7 @@ else    if (f1 && strcmp(f1, "1") == 0 &&
 
     return NULL;
 }
+
 
 // ===========================================================
 //            SERIAL TX THREAD (every 1 second)
