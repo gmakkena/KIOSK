@@ -639,12 +639,19 @@ static gboolean show_ticker_cb(gpointer data)
 static void switch_vt(int vt)
 {
     int fd = open("/dev/console", O_RDWR);
-    if (fd < 0) return;
+    if (fd < 0) {
+        perror("open /dev/console failed");
+        return;
+    }
 
-    ioctl(fd, VT_ACTIVATE, vt);
-    ioctl(fd, VT_WAITACTIVE, vt);
+    if (ioctl(fd, VT_ACTIVATE, vt) < 0)
+        perror("VT_ACTIVATE failed");
+
+    if (ioctl(fd, VT_WAITACTIVE, vt) < 0)
+        perror("VT_WAITACTIVE failed");
 
     close(fd);
+
 }
 // ===========================================================
 //                SERIAL READER THREAD (MAIN LOGIC)
