@@ -742,7 +742,7 @@ system(
     "printf \"loadfile /home/pi/KIOSK/gameover.gif replace\\n\" "
     "| socat - /tmp/mpv.sock"
 );
-);
+
 
                             system("chvt 2");
                         }
@@ -759,7 +759,6 @@ system(
     "| socat - /tmp/mpv.sock"
 );
 
-);
 
                             system("chvt 2");
                         }
