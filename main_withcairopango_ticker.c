@@ -39,6 +39,7 @@ GtkWidget *top_pane, *outermost, *outer, *inner;
 GtkWidget *ticker_fixed, *ticker_label;
 GtkWidget *gif_area = NULL;
 static gboolean tty2_active = FALSE;
+static gboolean tty4_active = FALSE;
 int ticker_x = 0;
 int ticker_width = 0;
 int ticker_area_width = 0;
@@ -813,9 +814,10 @@ static void *serial_reader_thread(void *arg)
                         f1 && strcmp(f1, "1") == 0 &&
                         f2)
                     {
-                        if (tty2_active) {
+                        if (tty2_active || tty4_active) {
                             system("sudo chvt 1");
                             tty2_active = FALSE;
+                            tty4_active = FALSE;
                         }
 
                         shift_tokens(f2);
@@ -834,6 +836,7 @@ static void *serial_reader_thread(void *arg)
 
                             clear_tokens();
                             tty2_active = TRUE;
+                            tty4_active = FALSE;
 
                             clear_tokens();
                             g_idle_add(update_ui_from_serial, NULL);
@@ -852,7 +855,9 @@ static void *serial_reader_thread(void *arg)
                         /* ---------- CONGRATULATIONS ---------- */
                         else if (strcmp(f2, "7A") == 0) {
 
-                            tty2_active = TRUE;
+                            //tty2_active = TRUE;
+                            tty4_active = TRUE;
+    tty2_active = FALSE;
 
              
 
@@ -862,10 +867,11 @@ static void *serial_reader_thread(void *arg)
                         /* ---------- EXIT OVERLAY ---------- */
                         else if (strcmp(f2, "7B") == 0) {
 
-                            if (tty2_active) {
+                            if (tty2_active || tty4_active) {
                                
                                 system("sudo chvt 1");
                                 tty2_active = FALSE;
+                                tty4_active = FALSE;
                             }
                         }
 
