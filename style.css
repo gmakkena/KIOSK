@@ -32,3 +32,11 @@ handle {
 window, GtkWindow {
   background-color: peachpuff;
 }
+
+#ticker_fixed {
+    overflow: hidden;
+}
+
+#ticker_label {
+    min-width: 0;
+}

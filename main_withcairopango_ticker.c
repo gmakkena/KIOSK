@@ -644,17 +644,15 @@ static gboolean set_paned_ratios(gpointer user_data) {
              "<span font_family='Arial' weight='bold' size='%d' foreground='#2F4F4F'>Aurum Smart Tech</span>",
              ticker_font_size);
 
-   gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
+    gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
 
     g_idle_add(refresh_images_on_ui, NULL);
-   / CRITICAL: Lock ticker_fixed to its parent's width
-    GtkWidget *ticker_parent = gtk_widget_get_parent(ticker_fixed);
-    if (ticker_parent) {
-        GtkAllocation parent_alloc;
-        gtk_widget_get_allocation(ticker_parent, &parent_alloc);
-        if (parent_alloc.width > 100) {
-            gtk_widget_set_size_request(ticker_fixed, parent_alloc.width, 60);
-        }
+    
+    // CRITICAL: Lock ticker_fixed to its parent's width
+    GtkAllocation parent_alloc;
+    gtk_widget_get_allocation(top_pane, &parent_alloc);  // Use top_pane width
+    if (parent_alloc.width > 100) {
+        gtk_widget_set_size_request(ticker_fixed, parent_alloc.width, 60);
     }
     
     // DON'T set size_request on ticker_label yet - let it measure naturally first
@@ -663,6 +661,7 @@ static gboolean set_paned_ratios(gpointer user_data) {
     g_timeout_add(100, finalize_ticker_setup, NULL);
     return G_SOURCE_REMOVE;
 }
+
 
 // ===========================================================
 //                        TOKEN LOGIC
