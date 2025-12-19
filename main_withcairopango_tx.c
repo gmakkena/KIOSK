@@ -609,7 +609,17 @@ static gboolean update_ui_from_serial(gpointer user_data) {
     g_idle_add(refresh_images_on_ui, NULL);
     return FALSE;
 }
+static gboolean hide_ticker_cb(gpointer data)
+{
+    gtk_widget_set_opacity(ticker_label, 0.0);
+    return G_SOURCE_REMOVE;
+}
 
+static gboolean show_ticker_cb(gpointer data)
+{
+    gtk_widget_set_opacity(ticker_label, 1.0);
+    return G_SOURCE_REMOVE;
+}
 // ===========================================================
 //                SERIAL READER THREAD (MAIN LOGIC)
 // ===========================================================
@@ -661,7 +671,7 @@ static void *serial_reader_thread(void *arg) {
     if (f1 && strcmp(f1, "1") == 0 &&
         f2 && strcmp(f2, "5A") == 0) {
 
-       gtk_widget_set_opacity(ticker_label, 0.0);
+        g_idle_add(hide_ticker_cb, NULL);
     }
 }
 else if (f0 && strcmp(f0, ":03") == 0) {
@@ -669,7 +679,7 @@ else if (f0 && strcmp(f0, ":03") == 0) {
     if (f1 && strcmp(f1, "1") == 0 &&
         f2 && strcmp(f2, "5B") == 0) {
 
-        gtk_widget_set_opacity(ticker_label, 1.0);
+        g_idle_add(show_ticker_cb, NULL);
     }
 }
                 }   
