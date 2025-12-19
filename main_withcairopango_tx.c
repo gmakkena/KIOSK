@@ -699,6 +699,9 @@ static void *serial_reader_thread(void *arg)
                      * :00 1 <token>
                      * :00 3 6A  → GAME OVER (gameover.gif)
                      * :00 3 7A  → CONGRATS (congratulations.gif)
+                     * :00 3 7B  → BACK TO TTY1
+                     * :00 3 5A  → HIDE TICKER
+                     * :00 3 5B  → SHOW TICKER
                      */
 
                     /* ==================================================
@@ -708,7 +711,6 @@ static void *serial_reader_thread(void *arg)
                         f1 && strcmp(f1, "1") == 0 &&
                         f2)
                     {
-                        /* If we were on tty2, return to tty1 */
                         if (tty2_active) {
                             system("chvt 1");
                             tty2_active = FALSE;
@@ -752,6 +754,25 @@ static void *serial_reader_thread(void *arg)
                             );
 
                             system("chvt 2");
+                        }
+
+                        /* ---------- EXIT OVERLAY ---------- */
+                        else if (strcmp(f2, "7B") == 0) {
+
+                            if (tty2_active) {
+                                system("chvt 1");
+                                tty2_active = FALSE;
+                            }
+                        }
+
+                        /* ---------- HIDE TICKER ---------- */
+                        else if (strcmp(f2, "5A") == 0) {
+                            g_idle_add(hide_ticker_cb, NULL);
+                        }
+
+                        /* ---------- SHOW TICKER ---------- */
+                        else if (strcmp(f2, "5B") == 0) {
+                            g_idle_add(show_ticker_cb, NULL);
                         }
                     }
                 }
