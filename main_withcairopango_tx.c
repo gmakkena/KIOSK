@@ -33,6 +33,8 @@ GtkWidget *current_image, *previous_image, *preceding_image;
 GtkWidget *top_pane, *outermost, *outer, *inner;
 GtkWidget *ticker_fixed, *ticker_label;
 GtkWidget *gif_area = NULL;
+static gboolean tty2_active = FALSE;
+
 
 // ===================== GIF Player Struct =====================
 typedef struct {
@@ -43,6 +45,7 @@ typedef struct {
 } GifPlayer;
 
 static GifPlayer *gif_player = NULL;
+
 
 // ===================== TOKENS =====================
 char current_token[32] = "--";
@@ -111,6 +114,13 @@ static void serial_send(const char *msg) {
     pthread_mutex_lock(&serial_lock);
     write(serial_fd, msg, strlen(msg));
     pthread_mutex_unlock(&serial_lock);
+}
+
+static void clear_tokens(void)
+{
+    strncpy(current_token,   "--", sizeof(current_token));
+    strncpy(previous_token,  "--", sizeof(previous_token));
+    strncpy(preceding_token, "--", sizeof(preceding_token));
 }
 
 // ===========================================================
@@ -645,10 +655,8 @@ static void *serial_reader_thread(void *arg)
                     buf[pos] = '\0';
                     pos = 0;
 
-                    /* Trim leading spaces */
                     char *p = buf;
-                    while (*p == ' ')
-                        p++;
+                    while (*p == ' ') p++;
 
                     char *save = NULL;
                     char *f0 = strtok_r(p, " ", &save);
@@ -668,8 +676,11 @@ static void *serial_reader_thread(void *arg)
                         f1 && strcmp(f1, "1") == 0 &&
                         f2)
                     {
-                        if (gif_playing)
-                            g_idle_add(hide_overlay_gif, NULL);
+                        /* If we were on tty2, return to tty1 */
+                        if (tty2_active) {
+                            system("chvt 1");
+                            tty2_active = FALSE;
+                        }
 
                         shift_tokens(f2);
                         g_idle_add(update_ui_from_serial, NULL);
@@ -680,9 +691,15 @@ static void *serial_reader_thread(void *arg)
                              f1 && strcmp(f1, "3") == 0 &&
                              f2)
                     {
-                        /* Show GIF */
+                        /* GAME OVER → switch to tty2 */
                         if (strcmp(f2, "6A") == 0) {
-                            g_idle_add(show_fullscreen_gif, "congratulations.gif");
+
+                            tty2_active = TRUE;
+
+                            clear_tokens();
+                            g_idle_add(update_ui_from_serial, NULL);
+
+                            system("chvt 2");
                         }
                         /* Hide ticker */
                         else if (strcmp(f2, "5A") == 0) {
