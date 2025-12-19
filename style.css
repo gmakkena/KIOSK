@@ -13,9 +13,7 @@ paned > separator {
   border-radius: 10px;
 }
 
-* {
-    cursor: none;
-}
+
 /* Hide GtkPaned divider lines and handles completely */
 GtkPaned,
 .pane-separator,
