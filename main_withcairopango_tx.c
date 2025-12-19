@@ -736,10 +736,8 @@ static void *serial_reader_thread(void *arg)
                             clear_tokens();
                             g_idle_add(update_ui_from_serial, NULL);
 
-                            system("printf \"stop\\n\" | socat - /tmp/mpv.sock");
-usleep(80000);   // 80 ms – critical
-system(
-    "printf \"loadfile /home/pi/KIOSK/gameover.gif replace\\n\" "
+                           system(
+    "printf \"stop\\nplaylist-clear\\nloadfile /home/pi/KIOSK/gameover.gif replace\\n\" "
     "| socat - /tmp/mpv.sock"
 );
 
@@ -752,10 +750,8 @@ system(
 
                             tty2_active = TRUE;
 
-             system("printf \"stop\\n\" | socat - /tmp/mpv.sock");
-usleep(80000);
-system(
-    "printf \"loadfile /home/pi/KIOSK/congratulations.gif replace\\n\" "
+             system(
+    "printf \"stop\\nplaylist-clear\\nloadfile /home/pi/KIOSK/congratulations.gif replace\\n\" "
     "| socat - /tmp/mpv.sock"
 );
 
