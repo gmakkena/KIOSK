@@ -560,7 +560,7 @@ static gboolean set_paned_ratios(gpointer user_data) {
     if (inner_alloc.height == 0) inner_alloc.height = 600;
 
     gtk_paned_set_position(GTK_PANED(top_pane), top_alloc.height * 0.11);
-    gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.88);
+    gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.85);
     gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.71);
     gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.65);
 
