@@ -764,7 +764,6 @@ static void mpv_load_gif(const char *gif)
 
 // ===========================================================
 //                SERIAL READER THREAD (MAIN LOGIC)
-// ===========================================================
 static void *serial_reader_thread(void *arg)
 {
     char buf[256];
@@ -799,9 +798,9 @@ static void *serial_reader_thread(void *arg)
 
                     /*
                      * FORMAT:
-                     * :00 1 <token>
-                     * :00 3 6A  → GAME OVER (gameover.gif)
-                     * :00 3 7A  → CONGRATS (congratulations.gif)
+                     * :01 1 <token>
+                     * :00 3 6A  → GAME OVER (tty2)
+                     * :00 3 7A  → CONGRATS (tty4)
                      * :00 3 7B  → BACK TO TTY1
                      * :00 3 5A  → HIDE TICKER
                      * :00 3 5B  → SHOW TICKER
@@ -814,8 +813,11 @@ static void *serial_reader_thread(void *arg)
                         f1 && strcmp(f1, "1") == 0 &&
                         f2)
                     {
+                        /* Return from ANY overlay VT */
                         if (tty2_active || tty4_active) {
                             system("sudo chvt 1");
+                            usleep(150000);          // allow VT settle
+                            system("sudo chvt 1");  // refresh bounce
                             tty2_active = FALSE;
                             tty4_active = FALSE;
                         }
@@ -838,16 +840,13 @@ static void *serial_reader_thread(void *arg)
                             tty2_active = TRUE;
                             tty4_active = FALSE;
 
-                            clear_tokens();
                             g_idle_add(update_ui_from_serial, NULL);
 
-                           system(
-    "printf \"playlist-clear\\n"
-    "loadfile /home/pi/KIOSK/gameover.gif replace\\n\" "
-    "| socat - /tmp/mpv.sock"
-);
-
-
+                            system(
+                                "printf \"playlist-clear\\n"
+                                "loadfile /home/pi/KIOSK/gameover.gif replace\\n\" "
+                                "| socat - /tmp/mpv.sock"
+                            );
 
                             system("sudo chvt 2");
                         }
@@ -855,11 +854,8 @@ static void *serial_reader_thread(void *arg)
                         /* ---------- CONGRATULATIONS ---------- */
                         else if (strcmp(f2, "7A") == 0) {
 
-                            //tty2_active = TRUE;
                             tty4_active = TRUE;
-    tty2_active = FALSE;
-
-             
+                            tty2_active = FALSE;
 
                             system("sudo chvt 4");
                         }
@@ -868,8 +864,11 @@ static void *serial_reader_thread(void *arg)
                         else if (strcmp(f2, "7B") == 0) {
 
                             if (tty2_active || tty4_active) {
-                               
+
                                 system("sudo chvt 1");
+                                usleep(150000);          // critical
+                                system("sudo chvt 1");  // force redraw
+
                                 tty2_active = FALSE;
                                 tty4_active = FALSE;
                             }
