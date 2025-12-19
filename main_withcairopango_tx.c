@@ -14,7 +14,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <linux/vt.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <unistd.h>
 // ===================== GLOBAL SERIAL =====================
 int serial_fd = -1;
 pthread_mutex_t serial_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -632,6 +635,17 @@ static gboolean show_ticker_cb(gpointer data)
     gtk_widget_set_opacity(ticker_label, 1.0);
     return G_SOURCE_REMOVE;
 }
+
+static void switch_vt(int vt)
+{
+    int fd = open("/dev/console", O_RDWR);
+    if (fd < 0) return;
+
+    ioctl(fd, VT_ACTIVATE, vt);
+    ioctl(fd, VT_WAITACTIVE, vt);
+
+    close(fd);
+}
 // ===========================================================
 //                SERIAL READER THREAD (MAIN LOGIC)
 // ===========================================================
@@ -680,7 +694,7 @@ static void *serial_reader_thread(void *arg)
                     {
                         /* Return from any overlay VT */
                         if (tty2_active || tty4_active) {
-                            system("chvt 1");
+                            switch_vt(1);
                             tty2_active = FALSE;
                             tty4_active = FALSE;
                         }
@@ -703,7 +717,7 @@ static void *serial_reader_thread(void *arg)
                             clear_tokens();                  // only here
                             g_idle_add(update_ui_from_serial, NULL);
 
-                            system("chvt 2");
+                            switch_vt(2);
                         }
 
                         /* CONGRATULATIONS → tty4 (non-destructive) */
@@ -712,14 +726,14 @@ static void *serial_reader_thread(void *arg)
                             tty4_active = TRUE;
                             tty2_active = FALSE;
 
-                            system("chvt 4");
+                            switch_vt(4);
                         }
 
                         /* EXIT CONGRATULATIONS → back to tty1 */
                         else if (strcmp(f2, "7B") == 0) {
 
                             if (tty4_active) {
-                                system("chvt 1");
+                                switch_vt(1);
                                 tty4_active = FALSE;
                             }
                         }
