@@ -866,7 +866,7 @@ static void *serial_reader_thread(void *arg)
                             if (tty2_active || tty4_active) {
 
                                 system("sudo chvt 1");
-                                usleep(150000);          // critical
+                                usleep(80000);          // critical
                                 system("sudo chvt 1");  // force redraw
 
                                 tty2_active = FALSE;
