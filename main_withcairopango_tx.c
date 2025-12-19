@@ -586,10 +586,10 @@ static gboolean set_paned_ratios(gpointer user_data) {
 
     char markup_ticker[256];
     snprintf(markup_ticker, sizeof(markup_ticker),
-             "<span font_family='Arial' weight='bold' size='%d' foreground='#2F4F4F'>           </span>",
+             "<span font_family='Arial' weight='bold' size='%d' foreground='#2F4F4F'>Aurum Smart Tech</span>",
              ticker_font_size);
 
-   // gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
+   gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
 
     g_idle_add(refresh_images_on_ui, NULL);
 
@@ -779,8 +779,8 @@ int main(int argc, char *argv[]) {
     gtk_widget_hide(gif_area);
 
     // Optional: hide ticker initially
-   // gtk_widget_hide(ticker_fixed);
-    //gtk_widget_hide(ticker_label);
+  // gtk_widget_hide(ticker_fixed);
+//gtk_widget_hide(ticker_label);
 
 
     // ---------------- Start Background Threads ----------------

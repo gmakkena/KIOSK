@@ -1,0 +1,5 @@
+sudo systemctl edit getty@tty1
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin pi --noclear --noissue --skip-login --login-options "-f pi" %I $TERM
+TTYVTDisallocate=no
