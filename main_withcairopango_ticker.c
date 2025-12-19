@@ -910,7 +910,7 @@ static void *serial_tx_thread(void *arg) {
 int main(int argc, char *argv[]) {
 
     gtk_init(&argc, &argv);
-
+    system("unclutter -idle 0.1 -root &");
     // ---------------- Serial Setup ----------------
     const char *serial_port = "/dev/serial0";
 
