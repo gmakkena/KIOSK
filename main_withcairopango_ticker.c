@@ -14,7 +14,12 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <linux/vt.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 // ===================== GLOBAL SERIAL =====================
 int serial_fd = -1;
 pthread_mutex_t serial_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -33,12 +38,13 @@ GtkWidget *current_image, *previous_image, *preceding_image;
 GtkWidget *top_pane, *outermost, *outer, *inner;
 GtkWidget *ticker_fixed, *ticker_label;
 GtkWidget *gif_area = NULL;
+static gboolean tty2_active = FALSE;
+int ticker_x = 0;
+int ticker_width = 0;
+int ticker_area_width = 0;
+guint ticker_timer_id = 0;
 
-// ===================== TICKER ANIMATION =====================
-static gint ticker_x = 0;
-static gint ticker_width = 0;
-static gint ticker_area_width = 0;
-static guint ticker_timer = 0;
+
 
 // ===================== GIF Player Struct =====================
 typedef struct {
@@ -49,6 +55,7 @@ typedef struct {
 } GifPlayer;
 
 static GifPlayer *gif_player = NULL;
+
 
 // ===================== TOKENS =====================
 char current_token[32] = "--";
@@ -117,6 +124,13 @@ static void serial_send(const char *msg) {
     pthread_mutex_lock(&serial_lock);
     write(serial_fd, msg, strlen(msg));
     pthread_mutex_unlock(&serial_lock);
+}
+
+static void clear_tokens(void)
+{
+    strncpy(current_token,   "--", sizeof(current_token));
+    strncpy(previous_token,  "--", sizeof(previous_token));
+    strncpy(preceding_token, "--", sizeof(preceding_token));
 }
 
 // ===========================================================
@@ -499,6 +513,32 @@ render_token_pixbuf_cairo(GtkWidget *widget,
     return pix;
 }
 
+gboolean animate_ticker(gpointer data) {
+    ticker_x -= 2;
+
+    if (ticker_x + ticker_width < 0)
+        ticker_x = ticker_area_width;
+
+    gtk_fixed_move(GTK_FIXED(ticker_fixed), ticker_label, ticker_x, 0);
+    return G_SOURCE_CONTINUE;
+}
+
+gboolean finalize_ticker_setup(gpointer data) {
+    ticker_width = gtk_widget_get_allocated_width(ticker_label);
+    ticker_area_width = gtk_widget_get_allocated_width(ticker_fixed);
+
+    if (ticker_width <= 1 || ticker_area_width <= 1)
+        return G_SOURCE_CONTINUE;
+
+    ticker_x = ticker_area_width;
+
+    if (ticker_timer_id == 0)
+        ticker_timer_id = g_timeout_add(30, animate_ticker, NULL);
+
+    return G_SOURCE_REMOVE;
+}
+
+
 static gboolean refresh_images_on_ui(gpointer user_data) {
     GdkPixbuf *pb1 = render_token_pixbuf_cairo(current_image,
                               current_token,
@@ -541,61 +581,6 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
     if (pb3) { gtk_image_set_from_pixbuf(GTK_IMAGE(preceding_image), pb3); g_object_unref(pb3); }
 
     return FALSE;
-}
-static gboolean animate_ticker(gpointer data)
-{
-    ticker_x -= 2;
-
-    if (ticker_x + ticker_width < 0)
-        ticker_x = ticker_area_width;
-
-    gtk_fixed_move(GTK_FIXED(ticker_fixed),
-                   ticker_label,
-                   ticker_x,
-                   0);
-
-    return G_SOURCE_CONTINUE;
-}
-
-static gboolean finalize_ticker_setup(gpointer data)
-{
-    ticker_width = gtk_widget_get_allocated_width(ticker_label);
-    ticker_area_width = gtk_widget_get_allocated_width(ticker_fixed);
-
-    if (ticker_width <= 1 || ticker_area_width <= 1)
-        return G_SOURCE_CONTINUE;
-
-    ticker_x = ticker_area_width;
-
-    gtk_fixed_move(GTK_FIXED(ticker_fixed),
-                   ticker_label,
-                   ticker_x,
-                   0);
-
-    if (ticker_timer == 0)
-        ticker_timer = g_timeout_add(30, animate_ticker, NULL);
-
-    return G_SOURCE_REMOVE;
-}
-static gboolean hide_ticker_cb(gpointer data)
-{
-    gtk_widget_set_opacity(ticker_label, 0.0);
-
-    if (ticker_timer) {
-        g_source_remove(ticker_timer);
-        ticker_timer = 0;
-    }
-
-    return G_SOURCE_REMOVE;
-}
-static gboolean show_ticker_cb(gpointer data)
-{
-    gtk_widget_set_opacity(ticker_label, 1.0);
-
-    if (ticker_timer == 0)
-        ticker_timer = g_timeout_add(30, animate_ticker, NULL);
-
-    return G_SOURCE_REMOVE;
 }
 
 
@@ -653,7 +638,8 @@ static gboolean set_paned_ratios(gpointer user_data) {
    gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
 
     g_idle_add(refresh_images_on_ui, NULL);
-
+    gtk_widget_set_size_request(ticker_fixed, -1, 60);
+gtk_widget_set_size_request(ticker_label, -1, 60);
     g_timeout_add(100, finalize_ticker_setup, NULL);
     return G_SOURCE_REMOVE;
 }
@@ -671,6 +657,39 @@ static gboolean update_ui_from_serial(gpointer user_data) {
     g_idle_add(refresh_images_on_ui, NULL);
     return FALSE;
 }
+static gboolean hide_ticker_cb(gpointer data)
+{
+    gtk_widget_set_opacity(ticker_label, 0.0);
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean show_ticker_cb(gpointer data)
+{
+    gtk_widget_set_opacity(ticker_label, 1.0);
+    return G_SOURCE_REMOVE;
+}
+#include <sys/socket.h>
+#include <sys/un.h>
+
+static void mpv_load_gif(const char *gif)
+{
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0)
+        return;
+
+    struct sockaddr_un addr = {0};
+    addr.sun_family = AF_UNIX;
+    strcpy(addr.sun_path, "/tmp/mpv.sock");
+
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd),
+                 "loadfile %s replace\n", gif);
+        write(fd, cmd, strlen(cmd));
+    }
+
+    close(fd);
+}
 
 // ===========================================================
 //                SERIAL READER THREAD (MAIN LOGIC)
@@ -680,12 +699,13 @@ static void *serial_reader_thread(void *arg)
     char buf[256];
     size_t pos = 0;
     char rbuf[64];
-    static guint tty_return_timer = 0;
 
     while (1) {
+
         int n = read(serial_fd, rbuf, sizeof(rbuf));
 
         if (n > 0) {
+
             for (int i = 0; i < n; i++) {
 
                 char c = rbuf[i];
@@ -698,44 +718,94 @@ static void *serial_reader_thread(void *arg)
                     buf[pos] = '\0';
                     pos = 0;
 
-                    /* Trim leading spaces */
                     char *p = buf;
-                    while (*p == ' ')
-                        p++;
+                    while (*p == ' ') p++;
 
                     char *save = NULL;
                     char *f0 = strtok_r(p, " ", &save);
                     char *f1 = strtok_r(NULL, " ", &save);
                     char *f2 = strtok_r(NULL, " ", &save);
 
-                    /* -------------------------
+                    /*
                      * FORMAT:
-                     * :01 1 <value>
-                     * :03 1 5A
-                     * :03 1 5B
-                     * ------------------------- */
+                     * :00 1 <token>
+                     * :00 3 6A  → GAME OVER (gameover.gif)
+                     * :00 3 7A  → CONGRATS (congratulations.gif)
+                     * :00 3 7B  → BACK TO TTY1
+                     * :00 3 5A  → HIDE TICKER
+                     * :00 3 5B  → SHOW TICKER
+                     */
 
-                    if (f0 && strcmp(f0, ":01") == 0) {
-
-                        if (f1 && strcmp(f1, "1") == 0 && f2) {
-
-                            if (gif_playing)
-                                g_idle_add(hide_overlay_gif, NULL);
-
-                            shift_tokens(f2);
-                            g_idle_add(update_ui_from_serial, NULL);
+                    /* ==================================================
+                     * TOKEN UPDATE
+                     * ================================================== */
+                    if (f0 && strcmp(f0, ":00") == 0 &&
+                        f1 && strcmp(f1, "1") == 0 &&
+                        f2)
+                    {
+                        if (tty2_active) {
+                            system("sudo chvt 1");
+                            tty2_active = FALSE;
                         }
+
+                        shift_tokens(f2);
+                        g_idle_add(update_ui_from_serial, NULL);
                     }
-                    else if (f0 && strcmp(f0, ":03") == 0) {
 
-                        if (f1 && strcmp(f1, "1") == 0 &&
-                            f2 && strcmp(f2, "5A") == 0) {
+                    /* ==================================================
+                     * CONTROL COMMANDS
+                     * ================================================== */
+                    else if (f0 && strcmp(f0, ":00") == 0 &&
+                             f1 && strcmp(f1, "3") == 0 &&
+                             f2)
+                    {
+                        /* ---------- GAME OVER ---------- */
+                        if (strcmp(f2, "6A") == 0) {
 
+                            clear_tokens();
+                            tty2_active = TRUE;
+
+                            clear_tokens();
+                            g_idle_add(update_ui_from_serial, NULL);
+
+                           system(
+    "printf \"playlist-clear\\n"
+    "loadfile /home/pi/KIOSK/gameover.gif replace\\n\" "
+    "| socat - /tmp/mpv.sock"
+);
+
+
+
+                            system("sudo chvt 2");
+                        }
+
+                        /* ---------- CONGRATULATIONS ---------- */
+                        else if (strcmp(f2, "7A") == 0) {
+
+                            tty2_active = TRUE;
+
+             
+
+                            system("sudo chvt 4");
+                        }
+
+                        /* ---------- EXIT OVERLAY ---------- */
+                        else if (strcmp(f2, "7B") == 0) {
+
+                            if (tty2_active) {
+                               
+                                system("sudo chvt 1");
+                                tty2_active = FALSE;
+                            }
+                        }
+
+                        /* ---------- HIDE TICKER ---------- */
+                        else if (strcmp(f2, "5A") == 0) {
                             g_idle_add(hide_ticker_cb, NULL);
                         }
-                        else if (f1 && strcmp(f1, "1") == 0 &&
-                                 f2 && strcmp(f2, "5B") == 0) {
 
+                        /* ---------- SHOW TICKER ---------- */
+                        else if (strcmp(f2, "5B") == 0) {
                             g_idle_add(show_ticker_cb, NULL);
                         }
                     }
@@ -752,7 +822,6 @@ static void *serial_reader_thread(void *arg)
 
     return NULL;
 }
-
 
 // ===========================================================
 //            SERIAL TX THREAD (every 1 second)
@@ -821,6 +890,8 @@ int main(int argc, char *argv[]) {
     ticker_fixed = GTK_WIDGET(gtk_builder_get_object(builder, "ticker_fixed"));
     ticker_label = GTK_WIDGET(gtk_builder_get_object(builder, "ticker_label"));
     gif_area     = GTK_WIDGET(gtk_builder_get_object(builder, "gif_area"));
+
+    
 
 
     // ---------------- Configurable Top Label ----------------
