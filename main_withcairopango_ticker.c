@@ -15,9 +15,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
-
-
 // ===================== GLOBAL SERIAL =====================
 int serial_fd = -1;
 pthread_mutex_t serial_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -36,36 +33,12 @@ GtkWidget *current_image, *previous_image, *preceding_image;
 GtkWidget *top_pane, *outermost, *outer, *inner;
 GtkWidget *ticker_fixed, *ticker_label;
 GtkWidget *gif_area = NULL;
+
 // ===================== TICKER ANIMATION =====================
-static gint  ticker_x = 0;
-static gint  ticker_y = 0;
+static gint ticker_x = 0;
+static gint ticker_width = 0;
+static gint ticker_area_width = 0;
 static guint ticker_timer = 0;
-
-static gboolean ticker_scroll_cb(gpointer data)
-{
-    GtkAllocation fixed_alloc;
-    GtkAllocation label_alloc;
-
-    if (!gtk_widget_get_realized(ticker_fixed))
-        return G_SOURCE_CONTINUE;
-
-    gtk_widget_get_allocation(ticker_fixed, &fixed_alloc);
-    gtk_widget_get_allocation(ticker_label, &label_alloc);
-
-    ticker_x -= 2;   // speed (adjust if needed)
-
-    if (ticker_x + label_alloc.width < 0) {
-        ticker_x = fixed_alloc.width;
-    }
-
-    gtk_fixed_move(GTK_FIXED(ticker_fixed),
-                   ticker_label,
-                   ticker_x,
-                   ticker_y);
-
-    return G_SOURCE_CONTINUE;
-}
-
 
 // ===================== GIF Player Struct =====================
 typedef struct {
@@ -569,6 +542,61 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
 
     return FALSE;
 }
+static gboolean animate_ticker(gpointer data)
+{
+    ticker_x -= 2;
+
+    if (ticker_x + ticker_width < 0)
+        ticker_x = ticker_area_width;
+
+    gtk_fixed_move(GTK_FIXED(ticker_fixed),
+                   ticker_label,
+                   ticker_x,
+                   0);
+
+    return G_SOURCE_CONTINUE;
+}
+
+static gboolean finalize_ticker_setup(gpointer data)
+{
+    ticker_width = gtk_widget_get_allocated_width(ticker_label);
+    ticker_area_width = gtk_widget_get_allocated_width(ticker_fixed);
+
+    if (ticker_width <= 1 || ticker_area_width <= 1)
+        return G_SOURCE_CONTINUE;
+
+    ticker_x = ticker_area_width;
+
+    gtk_fixed_move(GTK_FIXED(ticker_fixed),
+                   ticker_label,
+                   ticker_x,
+                   0);
+
+    if (ticker_timer == 0)
+        ticker_timer = g_timeout_add(30, animate_ticker, NULL);
+
+    return G_SOURCE_REMOVE;
+}
+static gboolean hide_ticker_cb(gpointer data)
+{
+    gtk_widget_set_opacity(ticker_label, 0.0);
+
+    if (ticker_timer) {
+        g_source_remove(ticker_timer);
+        ticker_timer = 0;
+    }
+
+    return G_SOURCE_REMOVE;
+}
+static gboolean show_ticker_cb(gpointer data)
+{
+    gtk_widget_set_opacity(ticker_label, 1.0);
+
+    if (ticker_timer == 0)
+        ticker_timer = g_timeout_add(30, animate_ticker, NULL);
+
+    return G_SOURCE_REMOVE;
+}
 
 
 // ===========================================================
@@ -624,29 +652,10 @@ static gboolean set_paned_ratios(gpointer user_data) {
 
    gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
 
-/* -------- TICKER ANIMATION INIT (ONE TIME) -------- */
-GtkAllocation fixed_alloc, label_alloc;
-gtk_widget_get_allocation(ticker_fixed, &fixed_alloc);
-gtk_widget_get_allocation(ticker_label, &label_alloc);
+    g_idle_add(refresh_images_on_ui, NULL);
 
-ticker_x = fixed_alloc.width;  // start off-screen right
-ticker_y = (fixed_alloc.height - label_alloc.height) / 2;
-if (ticker_y < 0) ticker_y = 0;
-
-gtk_fixed_move(GTK_FIXED(ticker_fixed),
-               ticker_label,
-               ticker_x,
-               ticker_y);
-
-if (ticker_timer == 0) {
-    ticker_timer = g_timeout_add(30, ticker_scroll_cb, NULL);
-}
-/* ------------------------------------------------- */
-
-g_idle_add(refresh_images_on_ui, NULL);
-
-return G_SOURCE_REMOVE;
-
+    g_timeout_add(100, finalize_ticker_setup, NULL);
+    return G_SOURCE_REMOVE;
 }
 
 // ===========================================================
@@ -665,25 +674,14 @@ static gboolean update_ui_from_serial(gpointer user_data) {
 static gboolean hide_ticker_cb(gpointer data)
 {
     gtk_widget_set_opacity(ticker_label, 0.0);
-
-    if (ticker_timer) {
-        g_source_remove(ticker_timer);
-        ticker_timer = 0;
-    }
-
     return G_SOURCE_REMOVE;
 }
+
 static gboolean show_ticker_cb(gpointer data)
 {
     gtk_widget_set_opacity(ticker_label, 1.0);
-
-    if (ticker_timer == 0) {
-        ticker_timer = g_timeout_add(30, ticker_scroll_cb, NULL);
-    }
-
     return G_SOURCE_REMOVE;
 }
-
 // ===========================================================
 //                SERIAL READER THREAD (MAIN LOGIC)
 // ===========================================================
