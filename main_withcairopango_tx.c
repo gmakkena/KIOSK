@@ -737,8 +737,12 @@ static void *serial_reader_thread(void *arg)
                             g_idle_add(update_ui_from_serial, NULL);
 
                            system(
-    "printf \"stop\\nplaylist-clear\\nloadfile /home/pi/KIOSK/gameover.gif replace\\n\" "
-    "| socat - /tmp/mpv.sock"
+    "printf \""
+    "stop\n"
+    "playlist-clear\n"
+    "loadfile /home/pi/KIOSK/black.mp4 replace\n"
+    "loadfile /home/pi/KIOSK/congratulations.gif replace\n"
+    "\" | socat - /tmp/mpv.sock"
 );
 
 
@@ -751,9 +755,14 @@ static void *serial_reader_thread(void *arg)
                             tty2_active = TRUE;
 
              system(
-    "printf \"stop\\nplaylist-clear\\nloadfile /home/pi/KIOSK/congratulations.gif replace\\n\" "
-    "| socat - /tmp/mpv.sock"
+    "printf \""
+    "stop\n"
+    "playlist-clear\n"
+    "loadfile /home/pi/KIOSK/black.mp4 replace\n"
+    "loadfile /home/pi/KIOSK/congratulations.gif replace\n"
+    "\" | socat - /tmp/mpv.sock"
 );
+
 
 
                             system("chvt 2");
