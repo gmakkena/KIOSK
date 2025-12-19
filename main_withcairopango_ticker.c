@@ -671,17 +671,7 @@ static gboolean update_ui_from_serial(gpointer user_data) {
     g_idle_add(refresh_images_on_ui, NULL);
     return FALSE;
 }
-static gboolean hide_ticker_cb(gpointer data)
-{
-    gtk_widget_set_opacity(ticker_label, 0.0);
-    return G_SOURCE_REMOVE;
-}
 
-static gboolean show_ticker_cb(gpointer data)
-{
-    gtk_widget_set_opacity(ticker_label, 1.0);
-    return G_SOURCE_REMOVE;
-}
 // ===========================================================
 //                SERIAL READER THREAD (MAIN LOGIC)
 // ===========================================================
