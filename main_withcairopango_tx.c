@@ -712,7 +712,7 @@ static void *serial_reader_thread(void *arg)
                         f2)
                     {
                         if (tty2_active) {
-                            system("chvt 1");
+                            system("sudo chvt 1");
                             tty2_active = FALSE;
                         }
 
@@ -744,7 +744,7 @@ static void *serial_reader_thread(void *arg)
 
 
 
-                            system("chvt 2");
+                            system("sudo chvt 2");
                         }
 
                         /* ---------- CONGRATULATIONS ---------- */
@@ -762,7 +762,7 @@ static void *serial_reader_thread(void *arg)
 
                             if (tty2_active) {
                                
-                                system("chvt 1");
+                                system("sudo chvt 1");
                                 tty2_active = FALSE;
                             }
                         }
