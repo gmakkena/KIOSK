@@ -523,23 +523,23 @@ gboolean animate_ticker(gpointer data) {
     return G_SOURCE_CONTINUE;
 }
 
-
 gboolean finalize_ticker_setup(gpointer data) {
-    ticker_area_width = gtk_widget_get_allocated_width(ticker_fixed);
+    // Get screen width instead of container width
+    GdkScreen *screen = gdk_screen_get_default();
+    ticker_area_width = gdk_screen_get_width(screen);
     
-    // Force ticker_fixed to not resize based on child
-    gtk_widget_set_size_request(ticker_fixed, ticker_area_width, 60);
-    
-    // Get label width AFTER it's measured
-    ticker_width = gtk_widget_get_allocated_width(ticker_label);
+    // Measure label
+    GtkRequisition label_req;
+    gtk_widget_get_preferred_size(ticker_label, NULL, &label_req);
+    ticker_width = label_req.width;
 
     if (ticker_width <= 1 || ticker_area_width <= 1)
         return G_SOURCE_CONTINUE;
 
-    // Start completely off-screen to the right
+    // Start off-screen right
     ticker_x = ticker_area_width;
     
-    // Lock label size so it doesn't request more space
+    // Lock label size
     gtk_widget_set_size_request(ticker_label, ticker_width, 60);
 
     if (ticker_timer_id == 0)
@@ -547,7 +547,6 @@ gboolean finalize_ticker_setup(gpointer data) {
 
     return G_SOURCE_REMOVE;
 }
-
 static gboolean refresh_images_on_ui(gpointer user_data) {
     GdkPixbuf *pb1 = render_token_pixbuf_cairo(current_image,
                               current_token,
@@ -662,7 +661,44 @@ static gboolean set_paned_ratios(gpointer user_data) {
     return G_SOURCE_REMOVE;
 }
 
-
+static void isolate_ticker_with_overlay(void) {
+    // Get ticker's current parent
+    GtkWidget *old_parent = gtk_widget_get_parent(ticker_fixed);
+    if (!old_parent) return;
+    
+    // Get the window's main child (should be top_pane)
+    GtkWidget *window_child = gtk_bin_get_child(GTK_BIN(window));
+    
+    // Create overlay
+    GtkWidget *overlay = gtk_overlay_new();
+    
+    // Reparent existing content to overlay base
+    g_object_ref(window_child);
+    gtk_container_remove(GTK_CONTAINER(window), window_child);
+    gtk_container_add(GTK_CONTAINER(overlay), window_child);
+    g_object_unref(window_child);
+    
+    // Create eventbox wrapper for ticker (for clipping)
+    GtkWidget *ticker_box = gtk_event_box_new();
+    gtk_widget_set_valign(ticker_box, GTK_ALIGN_START);
+    gtk_widget_set_margin_top(ticker_box, 80);  // Position below top label
+    gtk_widget_set_size_request(ticker_box, -1, 60);
+    
+    // Move ticker to overlay
+    g_object_ref(ticker_fixed);
+    gtk_container_remove(GTK_CONTAINER(old_parent), ticker_fixed);
+    gtk_container_add(GTK_CONTAINER(ticker_box), ticker_fixed);
+    g_object_unref(ticker_fixed);
+    
+    // Add ticker to overlay
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), ticker_box);
+    gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(overlay), ticker_box, TRUE);
+    
+    // Put overlay in window
+    gtk_container_add(GTK_CONTAINER(window), overlay);
+    
+    gtk_widget_show_all(overlay);
+}
 // ===========================================================
 //                        TOKEN LOGIC
 // ===========================================================
@@ -911,6 +947,7 @@ int main(int argc, char *argv[]) {
     gif_area     = GTK_WIDGET(gtk_builder_get_object(builder, "gif_area"));
 
     
+     isolate_ticker_with_overlay();
 
 
     // ---------------- Configurable Top Label ----------------
