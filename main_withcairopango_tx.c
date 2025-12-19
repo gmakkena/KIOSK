@@ -34,6 +34,8 @@ GtkWidget *top_pane, *outermost, *outer, *inner;
 GtkWidget *ticker_fixed, *ticker_label;
 GtkWidget *gif_area = NULL;
 static gboolean tty2_active = FALSE;
+static gboolean tty2_active = FALSE;
+static gboolean tty4_active = FALSE;
 
 
 // ===================== GIF Player Struct =====================
@@ -666,9 +668,9 @@ static void *serial_reader_thread(void *arg)
                     /*
                      * FORMAT:
                      * :00 1 <token>
-                     * :00 3 6A
-                     * :00 3 5A
-                     * :00 3 5B
+                     * :00 3 6A   → game over (tty2)
+                     * :00 3 7A   → congratulations (tty4)
+                     * :00 3 7B   → exit congratulations
                      */
 
                     /* ---------- TOKEN UPDATE ---------- */
@@ -676,10 +678,11 @@ static void *serial_reader_thread(void *arg)
                         f1 && strcmp(f1, "1") == 0 &&
                         f2)
                     {
-                        /* If we were on tty2, return to tty1 */
-                        if (tty2_active) {
+                        /* Return from any overlay VT */
+                        if (tty2_active || tty4_active) {
                             system("chvt 1");
                             tty2_active = FALSE;
+                            tty4_active = FALSE;
                         }
 
                         shift_tokens(f2);
@@ -691,23 +694,34 @@ static void *serial_reader_thread(void *arg)
                              f1 && strcmp(f1, "3") == 0 &&
                              f2)
                     {
-                        /* GAME OVER → switch to tty2 */
+                        /* GAME OVER → tty2 (destructive) */
                         if (strcmp(f2, "6A") == 0) {
 
                             tty2_active = TRUE;
+                            tty4_active = FALSE;
 
-                            clear_tokens();
+                            clear_tokens();                  // only here
                             g_idle_add(update_ui_from_serial, NULL);
 
                             system("chvt 2");
                         }
-                        /* Hide ticker */
-                        else if (strcmp(f2, "5A") == 0) {
-                            g_idle_add(hide_ticker_cb, NULL);
+
+                        /* CONGRATULATIONS → tty4 (non-destructive) */
+                        else if (strcmp(f2, "7A") == 0) {
+
+                            tty4_active = TRUE;
+                            tty2_active = FALSE;
+
+                            system("chvt 4");
                         }
-                        /* Show ticker */
-                        else if (strcmp(f2, "5B") == 0) {
-                            g_idle_add(show_ticker_cb, NULL);
+
+                        /* EXIT CONGRATULATIONS → back to tty1 */
+                        else if (strcmp(f2, "7B") == 0) {
+
+                            if (tty4_active) {
+                                system("chvt 1");
+                                tty4_active = FALSE;
+                            }
                         }
                     }
                 }
