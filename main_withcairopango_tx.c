@@ -375,11 +375,6 @@ static GdkPixbuf *render_token_pixbuf(GtkWidget *widget,
 #include <cairo.h>
 #include <pango/pangocairo.h>
 
-
-static gint  ticker_x = 0;
-static gint  ticker_y = 0;
-static guint ticker_timer = 0;
-
 /* ---------------------------------------------------------
  * Helper: set cairo color from hex string "#RRGGBB"
  * --------------------------------------------------------- */
@@ -541,32 +536,13 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
 
     return FALSE;
 }
-static gboolean ticker_scroll_cb(gpointer data)
-{
-    GtkAllocation fixed_alloc, label_alloc;
-
-    gtk_widget_get_allocation(ticker_fixed, &fixed_alloc);
-    gtk_widget_get_allocation(ticker_label, &label_alloc);
-
-    ticker_x -= 2;   // speed
-
-    if (ticker_x + label_alloc.width < 0)
-        ticker_x = fixed_alloc.width;
-
-    gtk_fixed_move(GTK_FIXED(ticker_fixed),
-                   ticker_label,
-                   ticker_x,
-                   ticker_y);
-
-    return G_SOURCE_CONTINUE;
-}
 
 
 // ===========================================================
 //                     PANED RESIZE LOGIC
 // ===========================================================
-static gboolean set_paned_ratios(gpointer user_data)
-{
+static gboolean set_paned_ratios(gpointer user_data) {
+
     gtk_paned_set_wide_handle(GTK_PANED(top_pane), FALSE);
     gtk_paned_set_wide_handle(GTK_PANED(outermost), FALSE);
     gtk_paned_set_wide_handle(GTK_PANED(outer), FALSE);
@@ -583,19 +559,17 @@ static gboolean set_paned_ratios(gpointer user_data)
     if (outer_alloc.width == 0) outer_alloc.width = 1200;
     if (inner_alloc.height == 0) inner_alloc.height = 600;
 
-    gtk_paned_set_position(GTK_PANED(top_pane),      top_alloc.height * 0.11);
-    gtk_paned_set_position(GTK_PANED(outermost),     outermost_alloc.height * 0.85);
-    gtk_paned_set_position(GTK_PANED(outer),         outer_alloc.width * 0.71);
-    gtk_paned_set_position(GTK_PANED(inner),         inner_alloc.height * 0.65);
+    gtk_paned_set_position(GTK_PANED(top_pane), top_alloc.height * 0.11);
+    gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.85);
+    gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.71);
+    gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.65);
 
     gtk_widget_show(top_label);
     gtk_widget_show(ticker_fixed);
     gtk_widget_show(ticker_label);
 
-    int top_font_size =
-        (int)(outermost_alloc.height * 0.08  * 0.9 * PANGO_SCALE);
-    int ticker_font_size =
-        (int)(outermost_alloc.height * 0.042 * 0.9 * PANGO_SCALE);
+    int top_font_size = (int)(outermost_alloc.height * 0.08 * 0.9 * PANGO_SCALE);
+    int ticker_font_size = (int)(outermost_alloc.height * 0.042 * 0.9 * PANGO_SCALE);
 
     const char *plain = gtk_label_get_text(GTK_LABEL(top_label));
     if (!plain) plain = "";
@@ -604,8 +578,7 @@ static gboolean set_paned_ratios(gpointer user_data)
 
     char markup_top[512];
     snprintf(markup_top, sizeof(markup_top),
-             "<span font_family='Fira Sans' weight='bold' "
-             "size='%d' foreground='#8B0000'>%s</span>",
+             "<span font_family='Fira Sans' weight='bold' size='%d' foreground='#8B0000'>%s</span>",
              top_font_size, escaped);
 
     gtk_label_set_markup(GTK_LABEL(top_label), markup_top);
@@ -613,36 +586,10 @@ static gboolean set_paned_ratios(gpointer user_data)
 
     char markup_ticker[256];
     snprintf(markup_ticker, sizeof(markup_ticker),
-             "<span font_family='Arial' weight='bold' "
-             "size='%d' foreground='#2F4F4F'>Aurum Smart Tech</span>",
+             "<span font_family='Arial' weight='bold' size='%d' foreground='#2F4F4F'>Aurum Smart Tech</span>",
              ticker_font_size);
 
-    gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
-
-    /* --------------------------------------------------
-     * TICKER SCROLL INITIALIZATION (RIGHT → LEFT)
-     * -------------------------------------------------- */
-
-    GtkAllocation fixed_alloc, label_alloc;
-    gtk_widget_get_allocation(ticker_fixed, &fixed_alloc);
-    gtk_widget_get_allocation(ticker_label, &label_alloc);
-
-    /* start off-screen to the right */
-    ticker_x = fixed_alloc.width;
-    ticker_y = (fixed_alloc.height - label_alloc.height) / 2;
-
-    if (ticker_y < 0)
-        ticker_y = 0;
-
-    gtk_fixed_move(GTK_FIXED(ticker_fixed),
-                   ticker_label,
-                   ticker_x,
-                   ticker_y);
-
-    /* start animation timer only once */
-    if (ticker_timer == 0) {
-        ticker_timer = g_timeout_add(30, ticker_scroll_cb, NULL);
-    }
+   gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
 
     g_idle_add(refresh_images_on_ui, NULL);
 
@@ -665,20 +612,12 @@ static gboolean update_ui_from_serial(gpointer user_data) {
 static gboolean hide_ticker_cb(gpointer data)
 {
     gtk_widget_set_opacity(ticker_label, 0.0);
-
-    if (ticker_timer) {
-        g_source_remove(ticker_timer);
-        ticker_timer = 0;
-    }
     return G_SOURCE_REMOVE;
 }
+
 static gboolean show_ticker_cb(gpointer data)
 {
     gtk_widget_set_opacity(ticker_label, 1.0);
-
-    if (ticker_timer == 0) {
-        ticker_timer = g_timeout_add(30, ticker_scroll_cb, NULL);
-    }
     return G_SOURCE_REMOVE;
 }
 // ===========================================================
