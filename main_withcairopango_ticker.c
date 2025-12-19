@@ -513,15 +513,18 @@ render_token_pixbuf_cairo(GtkWidget *widget,
     return pix;
 }
 
-gboolean animate_ticker(gpointer data) {
+gboolean animate_ticker(gpointer data)
+{
     ticker_x -= 2;
 
-    if (ticker_x + ticker_width < 0)
-        ticker_x = ticker_area_width;
+    /* Wrap BEFORE fully leaving screen */
+    if (ticker_x < -ticker_width)
+        ticker_x = 0;   // ← NOT ticker_area_width
 
     gtk_fixed_move(GTK_FIXED(ticker_fixed), ticker_label, ticker_x, 0);
     return G_SOURCE_CONTINUE;
 }
+
 
 gboolean finalize_ticker_setup(gpointer data) {
     ticker_width = gtk_widget_get_allocated_width(ticker_label);
