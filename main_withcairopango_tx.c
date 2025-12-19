@@ -701,7 +701,7 @@ static void *serial_reader_thread(void *arg)
                     {
                         /* Return from any overlay VT */
                         if (tty2_active || tty4_active) {
-                            switch_vt(1);
+                            system("/usr/local/bin/vt-switch.sh 1");
                             tty2_active = FALSE;
                             tty4_active = FALSE;
                         }
@@ -724,7 +724,7 @@ static void *serial_reader_thread(void *arg)
                             clear_tokens();                  // only here
                             g_idle_add(update_ui_from_serial, NULL);
 
-                            switch_vt(2);
+                            system("/usr/local/bin/vt-switch.sh 2");
                         }
 
                         /* CONGRATULATIONS → tty4 (non-destructive) */
@@ -733,14 +733,14 @@ static void *serial_reader_thread(void *arg)
                             tty4_active = TRUE;
                             tty2_active = FALSE;
 
-                            switch_vt(4);
+                            system("/usr/local/bin/vt-switch.sh 4");
                         }
 
                         /* EXIT CONGRATULATIONS → back to tty1 */
                         else if (strcmp(f2, "7B") == 0) {
 
                             if (tty4_active) {
-                                switch_vt(1);
+                                system("/usr/local/bin/vt-switch.sh 1");
                                 tty4_active = FALSE;
                             }
                         }
