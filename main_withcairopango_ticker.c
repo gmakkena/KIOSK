@@ -572,8 +572,8 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
                               "#FFDAB9",   // background
                               "#0000FF",   // number (blue)
                               "#555555",   // label (muted gray)
-                              0.50, 0.07,  // smaller fonts
-                             -0.04, 0.03,
+                              0.52, 0.08,  // smaller fonts
+                             -0.05, 0.03,
                              -0.06,  0.30,
                               "Liberation Sans Bold",
                               "Liberation Sans");
@@ -584,8 +584,8 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
                               "#FFDAB9",   // background
                               "#3E2723 ",   // number (brown)
                               "#4F4F4F",   // label (dark gray)
-                              0.65, 0.11,  // large number
-                             -0.08, -0.03,
+                              0.68, 0.13,  // large number
+                             -0.09, -0.03,
                              -0.05,  0.3,
                               "Liberation Sans Bold",
                               "Liberation Sans");
