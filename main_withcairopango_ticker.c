@@ -858,6 +858,11 @@ static void *serial_reader_thread(void *arg)
 
                             tty4_active = TRUE;
                             tty2_active = FALSE;
+                            system(
+                                "printf \"playlist-clear\\n"
+                                "loadfile /home/pi/KIOSK/congratulations1.gif replace\\n\" "
+                                "| socat - /tmp/mpv.sock"
+                            );
 
                             system("sudo chvt 4");
                         }
