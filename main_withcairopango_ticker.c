@@ -572,8 +572,8 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
                               "#FFDAB9",   // background
                               "#0000FF",   // number (blue)
                               "#555555",   // label (muted gray)
-                              0.55, 0.08,  // smaller fonts
-                             -0.08, 0.03,
+                              0.60, 0.08,  // smaller fonts
+                             -0.1, 0.03,
                              -0.06,  0.30,
                               "Liberation Sans Bold",
                               "Liberation Sans");
