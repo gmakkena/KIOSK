@@ -12,12 +12,24 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <linux/vt.h>
+
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+
+#define CMD_TOKEN        ":01"
+#define CMD_CONTROL      ":00"
+
+#define CTRL_HIDE_TICKER "5A"
+#define CTRL_SHOW_TICKER "5B"
+#define CTRL_GAME_OVER   "6A"
+#define CTRL_CONGRATS    "7A"
+#define CTRL_EXIT        "7B"
+#define GIF_GAME_OVER "/Users/gsm/Documents/KIOSK/gameover.gif"
+#define GIF_CONGRATS  "/Users/gsm/Documents/KIOSK/congratulations.gif"
+
 
 // ===================== GLOBAL SERIAL =====================
 int serial_fd = -1;
@@ -27,6 +39,7 @@ pthread_mutex_t serial_lock = PTHREAD_MUTEX_INITIALIZER;
 // ===================== GIF CONTROL FLAGS =====================
 static gboolean gif_playing = FALSE;
 static gulong gif_draw_handler_id = 0;
+static gboolean switch_to_gif_view(gpointer unused);
 
 GtkWidget *window;
 GtkWidget *top_label;
@@ -41,6 +54,11 @@ int ticker_area_width = 0;
 guint ticker_timer_id = 0;
 
 GtkStack *main_stack = NULL;
+static gboolean refresh_images_on_ui(gpointer user_data);
+static void gif_player_cleanup(void);
+static gboolean set_paned_ratios(gpointer user_data);
+
+
 
 // ===================== GIF Player Struct =====================
 typedef struct {
@@ -138,42 +156,53 @@ static gboolean gif_player_advance(gpointer data) {
     return G_SOURCE_CONTINUE;
 }
 
-
 static gboolean hide_overlay_gif(gpointer user_data)
 {
-    g_print("Hiding GIF view...\n");
+    g_print("[GIF] Back to main UI\n");
 
     gif_playing = FALSE;
-
-    /* Stop animation + free resources */
     gif_player_cleanup();
 
-    /* Disconnect draw handler */
-    if (gif_draw_handler_id != 0) {
+    if (gif_draw_handler_id) {
         g_signal_handler_disconnect(gif_area, gif_draw_handler_id);
         gif_draw_handler_id = 0;
     }
 
-    /* SWITCH BACK TO MAIN UI (GtkStack) */
     gtk_stack_set_visible_child_name(main_stack, "main_ui");
 
-    /* Ensure tokens are up to date when returning */
+    /* refresh token UI only */
     g_idle_add(refresh_images_on_ui, NULL);
 
     return FALSE;
 }
 
-static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
-    if (!gif_playing || !gif_player || !gif_player->animation)
-        return FALSE;
 
-    GdkPixbuf *frame = gdk_pixbuf_animation_iter_get_pixbuf(gif_player->iter);
-    if (!frame) return FALSE;
+static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
+{
+    static int cnt = 0;
+    g_print("[DRAW] gif_player_draw called %d\n", ++cnt);
+
+    if (!gif_playing || !gif_player || !gif_player->animation) {
+        g_print("[DRAW] skipped (playing=%d player=%p anim=%p)\n",
+                gif_playing, gif_player,
+                gif_player ? gif_player->animation : NULL);
+        return FALSE;
+    }
+
+    GdkPixbuf *frame =
+        gdk_pixbuf_animation_iter_get_pixbuf(gif_player->iter);
+
+    if (!frame) {
+        g_print("[DRAW] frame is NULL\n");
+        return FALSE;
+    }
 
     int W = gtk_widget_get_allocated_width(widget);
     int H = gtk_widget_get_allocated_height(widget);
     int fw = gdk_pixbuf_get_width(frame);
     int fh = gdk_pixbuf_get_height(frame);
+
+    g_print("[DRAW] widget=%dx%d frame=%dx%d\n", W, H, fw, fh);
 
     cairo_set_source_rgb(cr, 0, 0, 0);
     cairo_paint(cr);
@@ -191,6 +220,8 @@ static gboolean gif_player_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
 
     return FALSE;
 }
+
+
 
 static void gif_player_cleanup(void) {
     if (!gif_player) return;
@@ -211,31 +242,20 @@ static void gif_player_cleanup(void) {
     gif_player = NULL;
 }
 
-
 static gboolean show_fullscreen_gif(gpointer filename_ptr)
 {
     const char *filename = filename_ptr;
 
-    g_print("Loading GIF: %s\n", filename);
+    g_print("[GIF] Loading %s\n", filename);
 
     gif_playing = TRUE;
-
-    /* SWITCH TO GIF VIEW (GtkStack) */
-    gtk_stack_set_visible_child_name(main_stack, "gif_view");
-
-    /* Clean previous animation */
     gif_player_cleanup();
+
     gif_player = g_new0(GifPlayer, 1);
 
-    /* Load GIF */
-    GError *error = NULL;
     gif_player->animation =
-        gdk_pixbuf_animation_new_from_file(filename, &error);
-
+        gdk_pixbuf_animation_new_from_file(filename, NULL);
     if (!gif_player->animation) {
-        g_printerr("GIF load error: %s\n",
-                   error ? error->message : "unknown");
-        if (error) g_error_free(error);
         gif_playing = FALSE;
         return FALSE;
     }
@@ -244,28 +264,21 @@ static gboolean show_fullscreen_gif(gpointer filename_ptr)
         gdk_pixbuf_animation_get_iter(gif_player->animation, NULL);
 
     gif_player->timer = g_timer_new();
-    g_timer_start(gif_player->timer);
 
-    /* Install draw handler once */
     if (gif_draw_handler_id == 0) {
         gif_draw_handler_id =
-            g_signal_connect(gif_area,
-                             "draw",
-                             G_CALLBACK(gif_player_draw),
-                             NULL);
+            g_signal_connect(gif_area, "draw",
+                             G_CALLBACK(gif_player_draw), NULL);
     }
 
-    /* Force redraw (safe) */
-    gtk_widget_queue_draw(gif_area);
-
-    /* Start animation loop */
     gif_player->timeout_id =
-        g_timeout_add(10, gif_player_advance, NULL);
+        g_timeout_add(16, gif_player_advance, NULL);
+
+    /* 🔥 SWITCH STACK SAFELY */
+    g_idle_add(switch_to_gif_view, NULL);
 
     return FALSE;
 }
-
-
 
 
 static void set_cairo_color(cairo_t *cr, const char *hex)
@@ -571,125 +584,78 @@ static void *serial_reader_thread(void *arg)
     while (1) {
 
         int n = read(serial_fd, rbuf, sizeof(rbuf));
-
-        if (n > 0) {
-
-            for (int i = 0; i < n; i++) {
-
-                char c = rbuf[i];
-
-                if (c == '\r' || c == '\n') {
-
-                    if (pos == 0)
-                        continue;
-
-                    buf[pos] = '\0';
-                    pos = 0;
-
-                    char *p = buf;
-                    while (*p == ' ') p++;
-
-                    char *save = NULL;
-                    char *f0 = strtok_r(p, " ", &save);
-                    char *f1 = strtok_r(NULL, " ", &save);
-                    char *f2 = strtok_r(NULL, " ", &save);
-
-                    /*
-                     * FORMAT:
-                     * :01 1 <token>
-                     * :00 3 6A  → GAME OVER (tty2)
-                     * :00 3 7A  → CONGRATS (tty4)
-                     * :00 3 7B  → BACK TO TTY1
-                     * :00 3 5A  → HIDE TICKER
-                     * :00 3 5B  → SHOW TICKER
-                     */
-
-                    /* ==================================================
-                     * TOKEN UPDATE
-                     * ================================================== */
-                    if (f0 && strcmp(f0, ":01") == 0 &&
-                        f1 && strcmp(f1, "1") == 0 &&
-                        f2)
-                    {
-                        /* Return from ANY overlay VT */
-                        if (tty2_active || tty4_active) {
-                            system("sudo chvt 1");
-                            usleep(150000);          // allow VT settle
-                            system("sudo chvt 1");  // refresh bounce
-                            tty2_active = FALSE;
-                            tty4_active = FALSE;
-                        }
-
-                        shift_tokens(f2);
-                        g_idle_add(update_ui_from_serial, NULL);
-                    }
-
-                    /* ==================================================
-                     * CONTROL COMMANDS
-                     * ================================================== */
-                    else if (f0 && strcmp(f0, ":00") == 0 &&
-                             f1 && strcmp(f1, "3") == 0 &&
-                             f2)
-                    {
-                        /* ---------- GAME OVER ---------- */
-                        if (strcmp(f2, "6A") == 0) {
-
-                            clear_tokens();
-                            tty2_active = TRUE;
-                            tty4_active = FALSE;
-
-                            g_idle_add(update_ui_from_serial, NULL);
-
-                            system(
-                                "printf \"playlist-clear\\n"
-                                "loadfile /home/pi/KIOSK/gameover.gif replace\\n\" "
-                                "| socat - /tmp/mpv.sock"
-                            );
-
-                            system("sudo chvt 2");
-                        }
-
-                        /* ---------- CONGRATULATIONS ---------- */
-                        else if (strcmp(f2, "7A") == 0) {
-
-                            tty4_active = TRUE;
-                            tty2_active = FALSE;
-
-                            system("sudo chvt 4");
-                        }
-
-                        /* ---------- EXIT OVERLAY ---------- */
-                        else if (strcmp(f2, "7B") == 0) {
-
-                            if (tty2_active || tty4_active) {
-
-                                system("sudo chvt 1");
-                               usleep(150000);          // critical
-                               system("sudo chvt 1");  // force redraw
-
-                                tty2_active = FALSE;
-                                tty4_active = FALSE;
-                            }
-                        }
-
-                        /* ---------- HIDE TICKER ---------- */
-                        else if (strcmp(f2, "5A") == 0) {
-                            g_idle_add(hide_ticker_cb, NULL);
-                        }
-
-                        /* ---------- SHOW TICKER ---------- */
-                        else if (strcmp(f2, "5B") == 0) {
-                            g_idle_add(show_ticker_cb, NULL);
-                        }
-                    }
-                }
-                else if (pos + 1 < sizeof(buf)) {
-                    buf[pos++] = c;
-                }
-            }
-        }
-        else {
+        if (n <= 0) {
             usleep(20000);
+            continue;
+        }
+
+        for (int i = 0; i < n; i++) {
+
+            char c = rbuf[i];
+
+            if (c != '\r' && c != '\n') {
+                if (pos + 1 < sizeof(buf))
+                    buf[pos++] = c;
+                continue;
+            }
+
+            if (pos == 0)
+                continue;
+
+            buf[pos] = '\0';
+            pos = 0;
+
+            char *p = buf;
+            while (*p == ' ') p++;
+
+            char *save = NULL;
+            char *f0 = strtok_r(p, " ", &save);
+            char *f1 = strtok_r(NULL, " ", &save);
+            char *f2 = strtok_r(NULL, " ", &save);
+
+            if (!f0 || !f1 || !f2)
+                continue;
+
+            /* ================= TOKEN UPDATE ================= */
+            if (strcmp(f0, CMD_TOKEN) == 0 &&
+                strcmp(f1, "1") == 0)
+            {
+                shift_tokens(f2);
+                g_idle_add(update_ui_from_serial, NULL);
+                continue;
+            }
+
+            /* ================= CONTROL COMMANDS ================= */
+            if (strcmp(f0, CMD_CONTROL) != 0 ||
+                strcmp(f1, "3") != 0)
+                continue;
+
+            /* ---------- HIDE TICKER ---------- */
+            if (strcmp(f2, CTRL_HIDE_TICKER) == 0) {
+                g_idle_add(hide_ticker_cb, NULL);
+            }
+
+            /* ---------- SHOW TICKER ---------- */
+            else if (strcmp(f2, CTRL_SHOW_TICKER) == 0) {
+                g_idle_add(show_ticker_cb, NULL);
+            }
+
+            /* ---------- GAME OVER GIF ---------- */
+            else if (strcmp(f2, CTRL_GAME_OVER) == 0) {
+                g_idle_add(show_fullscreen_gif,
+                           (gpointer)GIF_GAME_OVER);
+            }
+
+            /* ---------- CONGRATS GIF ---------- */
+            else if (strcmp(f2, CTRL_CONGRATS) == 0) {
+                g_idle_add(show_fullscreen_gif,
+                           (gpointer)GIF_CONGRATS);
+            }
+
+            /* ---------- BACK TO MAIN UI ---------- */
+            else if (strcmp(f2, CTRL_EXIT) == 0) {
+                g_idle_add(hide_overlay_gif, NULL);
+            }
         }
     }
 
@@ -707,18 +673,99 @@ static void *serial_tx_thread(void *arg) {
 }
 
 
+/* ===================== KEYBOARD TEST HANDLER =====================
+ * For macOS / development testing only
+ * ---------------------------------------------------------------
+ * 1 → Game Over GIF
+ * 2 → Congrats GIF
+ * 3 → Back to Main UI
+ * 4 → Update token (demo)
+ * h → Hide ticker
+ * s → Show ticker
+ * =============================================================== */
+
+static gboolean key_test_cb(GtkWidget *widget,
+                            GdkEventKey *event,
+                            gpointer user_data)
+{
+    switch (event->keyval) {
+
+        case GDK_KEY_1:
+            g_print("[KEY] GAME OVER\n");
+            g_idle_add(show_fullscreen_gif,
+                       (gpointer)GIF_GAME_OVER);
+            break;
+
+        case GDK_KEY_2:
+            g_print("[KEY] CONGRATS\n");
+            g_idle_add(show_fullscreen_gif,
+                       (gpointer)GIF_CONGRATS);
+            break;
+
+        case GDK_KEY_3:
+            g_print("[KEY] BACK TO MAIN UI\n");
+            g_idle_add(hide_overlay_gif, NULL);
+            break;
+
+        case GDK_KEY_4:
+            g_print("[KEY] TOKEN UPDATE\n");
+            shift_tokens("99");
+            g_idle_add(update_ui_from_serial, NULL);
+            break;
+
+        case GDK_KEY_h:
+        case GDK_KEY_H:
+            g_print("[KEY] HIDE TICKER\n");
+            g_idle_add(hide_ticker_cb, NULL);
+            break;
+
+        case GDK_KEY_s:
+        case GDK_KEY_S:
+            g_print("[KEY] SHOW TICKER\n");
+            g_idle_add(show_ticker_cb, NULL);
+            break;
+
+        default:
+            return FALSE;
+    }
+
+    return TRUE;
+}
+
+static gboolean stack_debug_switch(gpointer data)
+{
+    static int flip = 0;
+
+    if (flip) {
+        g_print(">>> SHOW main_ui\n");
+        gtk_stack_set_visible_child_name(main_stack, "main_ui");
+    } else {
+        g_print(">>> SHOW gif_view\n");
+        gtk_stack_set_visible_child_name(main_stack, "gif_view");
+    }
+
+    flip ^= 1;
+    return G_SOURCE_CONTINUE;
+}
+static gboolean switch_to_gif_view(gpointer unused)
+{
+    gtk_stack_set_visible_child_name(main_stack, "gif_view");
+    gtk_widget_queue_draw(gif_area);
+    return G_SOURCE_REMOVE;
+}
+
 
 int main(int argc, char *argv[]) {
 
     gtk_init(&argc, &argv);
-    system("unclutter -idle 0.1 -root &");
+    //system("unclutter -idle 0.1 -root &");
     // ---------------- Serial Setup ----------------
     const char *serial_port = "/dev/serial0";
 
     serial_fd = open(serial_port, O_RDWR | O_NOCTTY);
     if (serial_fd < 0) {
         perror("Failed to open serial port");
-        return 1;
+       // return 1;
     }
 
     struct termios options;
@@ -762,7 +809,22 @@ int main(int argc, char *argv[]) {
     ticker_label = GTK_WIDGET(gtk_builder_get_object(builder, "ticker_label"));
     main_stack   = GTK_STACK(gtk_builder_get_object(builder, "main_stack"));
     gif_area     = GTK_WIDGET(gtk_builder_get_object(builder, "gif_drawing_area"));
+/* Get widgets */
+main_stack = GTK_STACK(gtk_builder_get_object(builder, "main_stack"));
+gif_area   = GTK_WIDGET(gtk_builder_get_object(builder, "gif_drawing_area"));
+top_pane   = GTK_WIDGET(gtk_builder_get_object(builder, "top_pane"));
 
+/* Detach from Glade parents */
+gtk_widget_unparent(gif_area);
+gtk_widget_unparent(top_pane);
+
+/* Attach stack pages explicitly */
+gtk_stack_add_named(main_stack, gif_area, "gif_view");
+gtk_stack_add_named(main_stack, top_pane, "main_ui");
+
+/* Make stack layout sane */
+gtk_stack_set_homogeneous(main_stack, TRUE);
+gtk_stack_set_vhomogeneous(main_stack, TRUE);
 
     // ---------------- Configurable Top Label ----------------
     char *cfg_label = read_config_value("/boot/firmware/aurum.txt", "AURUM_TOP_LABEL");
@@ -781,10 +843,26 @@ int main(int argc, char *argv[]) {
         GTK_STYLE_PROVIDER_PRIORITY_APPLICATION
     );
 
-    gtk_widget_show_all(window);
+   
 
-    /* IMPORTANT: force initial page */
+    gtk_widget_set_can_focus(window, TRUE);
+gtk_widget_grab_focus(window);
+
+gtk_widget_add_events(window, GDK_KEY_PRESS_MASK);
+
+
+/* ===================== KEYBOARD TEST (DEV ONLY) ===================== */
+g_signal_connect(window,
+                 "key-press-event",
+                 G_CALLBACK(key_test_cb),
+                 NULL);
+
+ gtk_widget_show_all(window);
 gtk_stack_set_visible_child_name(main_stack, "main_ui");
+
+/* ===== FULLSCREEN AFTER SHOW ===== */
+gtk_window_fullscreen(GTK_WINDOW(window));
+gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
 
     // ---------------- Fullscreen Window ----------------
     GdkScreen *screen = gdk_screen_get_default();
@@ -797,7 +875,8 @@ gtk_stack_set_visible_child_name(main_stack, "main_ui");
     // Apply pane ratios after layout stabilizes
     g_timeout_add(200, set_paned_ratios, NULL);
 
-    
+   // g_timeout_add_seconds(2, stack_debug_switch, NULL);
+
 
 
     // ---------------- Start Background Threads ----------------

@@ -14,11 +14,13 @@
         <property name="visible">True</property>
         <property name="hexpand">True</property>
         <property name="vexpand">True</property>
+       
 
         <!-- ================= STACK PAGE 1 : GIF DRAWING AREA ================= -->
         <child>
           <object class="GtkDrawingArea" id="gif_drawing_area">
             <property name="visible">True</property>
+            
             <property name="can-focus">False</property>
             <property name="hexpand">True</property>
             <property name="vexpand">True</property>
@@ -37,6 +39,7 @@
             <property name="orientation">vertical</property>
             <property name="position">10</property>
             <property name="position-set">True</property>
+            
 
             <child>
               <object class="GtkLabel" id="top_label">
@@ -123,7 +126,7 @@
 
                 <child>
                   <object class="GtkFixed" id="ticker_fixed">
-                    <property name="width-request">1</property>
+                    
                     <property name="height-request">60</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
