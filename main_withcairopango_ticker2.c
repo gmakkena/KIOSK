@@ -38,6 +38,7 @@ static gulong gif_draw_handler_id = 0;
 // ===================== Widgets =====================
 GtkWidget *window;
 GtkWidget *top_label;
+GtkWidget *please_wait_label;  // NEW: Separate label for "Please wait..."
 GtkWidget *current_image, *previous_image, *preceding_image;
 GtkWidget *top_pane, *outermost, *outer, *inner;
 GtkWidget *ticker_fixed, *ticker_label;
@@ -57,6 +58,7 @@ static gboolean number_visible = TRUE;
 // ===================== BULK TOKEN DETECTION & STATE =====================
 static struct timespec last_token_time = {0, 0};
 #define BULK_TOKEN_THRESHOLD_MS 500  // Tokens within 500ms = bulk
+#define BULK_FINISH_DELAY_MS 4000    // Wait 4 seconds after last token before finishing bulk
 static gboolean bulk_loading = FALSE;
 static gboolean first_token_received = FALSE;
 static guint bulk_finish_timer_id = 0;
@@ -108,9 +110,8 @@ static gboolean finish_bulk_loading(gpointer data) {
     bulk_loading = FALSE;
     bulk_finish_timer_id = 0;
     
-    // Show the tokens
-    number_visible = TRUE;
-    refresh_images_on_ui(NULL);
+    // Hide "Please wait..." label
+    g_idle_add(hide_please_wait_cb, NULL);
     
     // If this is the very first token on startup, flash it
     if (first_ever_token) {
@@ -387,7 +388,7 @@ static void set_cairo_color(cairo_t *cr, const char *hex)
     }
 }
 
-// Render token with optional "Please wait..." override
+// Render token with number or "--"
 static GdkPixbuf *render_token_pixbuf_cairo(GtkWidget *widget, 
                                             const char *number, 
                                             const char *label, 
@@ -417,25 +418,13 @@ static GdkPixbuf *render_token_pixbuf_cairo(GtkWidget *widget,
     char fontdesc[128];
     int tw, th;
 
-    /* Draw NUMBER or "Please wait..." */
+    /* Draw NUMBER - Only if show_number is TRUE */
     if (show_number) {
         set_cairo_color(cr, num_hex);
         snprintf(fontdesc, sizeof(fontdesc), "%s %d", num_font, (int)(h * number_size_frac));
         PangoFontDescription *fd = pango_font_description_from_string(fontdesc);
         pango_layout_set_font_description(layout, fd);
         pango_layout_set_text(layout, number ? number : "--", -1);
-        pango_layout_get_pixel_size(layout, &tw, &th);
-        cairo_move_to(cr, (w / 2 + (int)(w * number_x_frac)) - tw / 2, 
-                         (h / 2 + (int)(h * number_y_frac)) - th / 2);
-        pango_cairo_show_layout(cr, layout);
-        pango_font_description_free(fd);
-    } else if (!first_token_received || bulk_loading) {
-        // Show "Please wait..." when no tokens or during bulk loading
-        set_cairo_color(cr, num_hex);
-        snprintf(fontdesc, sizeof(fontdesc), "%s %d", num_font, (int)(h * 0.20)); // Smaller font
-        PangoFontDescription *fd = pango_font_description_from_string(fontdesc);
-        pango_layout_set_font_description(layout, fd);
-        pango_layout_set_text(layout, "Please wait...", -1);
         pango_layout_get_pixel_size(layout, &tw, &th);
         cairo_move_to(cr, (w / 2 + (int)(w * number_x_frac)) - tw / 2, 
                          (h / 2 + (int)(h * number_y_frac)) - th / 2);
@@ -502,33 +491,28 @@ gboolean finalize_ticker_setup(gpointer data) {
 
 
 static gboolean refresh_images_on_ui(gpointer user_data) {
-    // Determine what to show based on state
-    gboolean show_current = first_token_received && !bulk_loading && number_visible;
-    
-    // Current Image - shows number, or "Please wait..."
+    // Current Image - show/hide based on number_visible flag
     GdkPixbuf *pb1 = render_token_pixbuf_cairo(current_image, 
         current_token, "Current Draw", 
         "#FFDAB9", "#FF0000", "#333333", 
         0.65, 0.15, -0.08, 0.03, -0.05, 0.41, 
         "Liberation Sans Bold", "Liberation Sans", 
-        show_current);
+        number_visible);
     
-    // History images - only show if we have tokens and not bulk loading
-    gboolean show_history = first_token_received && !bulk_loading;
-    
+    // History images - always visible
     GdkPixbuf *pb2 = render_token_pixbuf_cairo(previous_image, 
         previous_token, "Previous Draw", 
         "#FFDAB9", "#0000FF", "#555555", 
         0.50, 0.07, -0.04, 0.03, -0.06, 0.30, 
         "Liberation Sans Bold", "Liberation Sans", 
-        show_history);
+        TRUE);
         
     GdkPixbuf *pb3 = render_token_pixbuf_cairo(preceding_image, 
         preceding_token, "Preceding Draw", 
         "#FFDAB9", "#3E2723", "#4F4F4F", 
         0.65, 0.11, -0.08, -0.03, -0.05, 0.3, 
         "Liberation Sans Bold", "Liberation Sans", 
-        show_history);
+        TRUE);
 
     if (pb1) { gtk_image_set_from_pixbuf(GTK_IMAGE(current_image), pb1); g_object_unref(pb1); }
     if (pb2) { gtk_image_set_from_pixbuf(GTK_IMAGE(previous_image), pb2); g_object_unref(pb2); }
@@ -590,8 +574,6 @@ static gboolean set_paned_ratios(gpointer user_data) {
 
     gtk_label_set_markup(GTK_LABEL(ticker_label), markup_ticker);
 
-    g_idle_add(refresh_images_on_ui, NULL);
-    
     // CRITICAL: Lock ticker_fixed to its parent's width
     GtkAllocation parent_alloc;
     gtk_widget_get_allocation(top_pane, &parent_alloc);  // Use top_pane width
@@ -666,7 +648,7 @@ static void shift_tokens(const char *new_token) {
 }
 
 static gboolean update_ui_from_serial(gpointer user_data) {
-    g_idle_add(refresh_images_on_ui, NULL);
+    // Tokens are hidden, no need to refresh them
     return FALSE;
 }
 
@@ -679,6 +661,21 @@ static gboolean hide_ticker_cb(gpointer data)
 static gboolean show_ticker_cb(gpointer data)
 {
     gtk_widget_set_opacity(ticker_label, 1.0);
+    return G_SOURCE_REMOVE;
+}
+
+// ===================== PLEASE WAIT LABEL HELPERS =====================
+static gboolean show_please_wait_cb(gpointer data)
+{
+    if (please_wait_label)
+        gtk_widget_show(please_wait_label);
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean hide_please_wait_cb(gpointer data)
+{
+    if (please_wait_label)
+        gtk_widget_hide(please_wait_label);
     return G_SOURCE_REMOVE;
 }
 
@@ -787,11 +784,13 @@ static void *serial_reader_thread(void *arg)
                                 // Start of bulk load (startup)
                                 bulk_loading = TRUE;
                                 number_visible = FALSE;  // Hide numbers during bulk
+                                g_idle_add(show_please_wait_cb, NULL);  // Show "Please wait..."
                             } else {
                                 // Single first token on startup - flash it
                                 bulk_loading = FALSE;
                                 number_visible = TRUE;
                                 first_ever_token = FALSE;  // Mark that we've shown first token
+                                g_idle_add(hide_please_wait_cb, NULL);  // Make sure it's hidden
                                 
                                 // Trigger flash
                                 if (flash_timer_id > 0) {
@@ -808,13 +807,14 @@ static void *serial_reader_thread(void *arg)
                                 // Continue bulk loading
                                 bulk_loading = TRUE;
                                 number_visible = FALSE;
+                                g_idle_add(show_please_wait_cb, NULL);  // Show "Please wait..."
                                 
                                 // Reset finish timer
                                 if (bulk_finish_timer_id > 0) {
                                     g_source_remove(bulk_finish_timer_id);
                                 }
-                                // Set timer to finish bulk loading after 1 second of no tokens
-                                bulk_finish_timer_id = g_timeout_add(1000, finish_bulk_loading, NULL);
+                                // Set timer to finish bulk loading after 4 seconds of no tokens
+                                bulk_finish_timer_id = g_timeout_add(BULK_FINISH_DELAY_MS, finish_bulk_loading, NULL);
                             } else {
                                 // Single token (normal operation)
                                 if (bulk_loading) {
@@ -827,6 +827,7 @@ static void *serial_reader_thread(void *arg)
                                 } else {
                                     // Regular single token - flash it
                                     number_visible = TRUE;
+                                    g_idle_add(hide_please_wait_cb, NULL);  // Make sure it's hidden
                                     
                                     if (flash_timer_id > 0) {
                                         g_source_remove(flash_timer_id);
@@ -992,6 +993,38 @@ int main(int argc, char *argv[]) {
     ticker_label = GTK_WIDGET(gtk_builder_get_object(builder, "ticker_label"));
     gif_area     = GTK_WIDGET(gtk_builder_get_object(builder, "gif_area"));
 
+    // ============== CREATE "PLEASE WAIT..." LABEL ==============
+    please_wait_label = gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(please_wait_label),
+        "<span font_family='Arial' weight='bold' size='80000' foreground='#FF6347'>"
+        "Please wait..."
+        "</span>");
+    gtk_widget_set_halign(please_wait_label, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(please_wait_label, GTK_ALIGN_CENTER);  // Center vertically
+    gtk_widget_set_margin_top(please_wait_label, 0);
+    
+    // Add to outermost pane (between top_pane and token area)
+    GtkWidget *main_box = gtk_paned_get_child2(GTK_PANED(top_pane));
+    if (main_box && GTK_IS_CONTAINER(main_box)) {
+        // Create overlay to add please_wait_label on top
+        GtkWidget *content_overlay = gtk_overlay_new();
+        
+        g_object_ref(main_box);
+        gtk_container_remove(GTK_CONTAINER(top_pane), main_box);
+        gtk_container_add(GTK_CONTAINER(content_overlay), main_box);
+        g_object_unref(main_box);
+        
+        gtk_overlay_add_overlay(GTK_OVERLAY(content_overlay), please_wait_label);
+        gtk_paned_pack2(GTK_PANED(top_pane), content_overlay, TRUE, TRUE);
+    }
+    
+    // HIDE ALL TOKEN WIDGETS - we only want top label, please wait, and ticker
+    gtk_widget_hide(current_image);
+    gtk_widget_hide(previous_image);
+    gtk_widget_hide(preceding_image);
+    gtk_widget_hide(outermost);  // Hide entire token display area
+    
+    gtk_widget_show(please_wait_label);  // Show "Please wait..." on startup
     
     isolate_ticker_with_overlay();
 
