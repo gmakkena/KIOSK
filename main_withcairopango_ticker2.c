@@ -30,6 +30,8 @@ pthread_mutex_t serial_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // Forward declaration (required)
 static gboolean refresh_images_on_ui(gpointer user_data);
+static gboolean hide_please_wait_cb(gpointer data);
+static gboolean show_please_wait_cb(gpointer data);
 
 // ===================== GIF CONTROL FLAGS =====================
 static gboolean gif_playing = FALSE;
