@@ -60,6 +60,7 @@ static struct timespec last_token_time = {0, 0};
 static gboolean bulk_loading = FALSE;
 static gboolean first_token_received = FALSE;
 static guint bulk_finish_timer_id = 0;
+static gboolean first_ever_token = TRUE;  // Track very first token for startup flash
 
 // ===================== GIF Player Struct =====================
 typedef struct {
@@ -107,18 +108,24 @@ static gboolean finish_bulk_loading(gpointer data) {
     bulk_loading = FALSE;
     bulk_finish_timer_id = 0;
     
-    // Now trigger the flash for the last token
+    // Show the tokens
     number_visible = TRUE;
     refresh_images_on_ui(NULL);
     
-    if (flash_timer_id > 0) {
-        g_source_remove(flash_timer_id);
-        flash_timer_id = 0;
+    // If this is the very first token on startup, flash it
+    if (first_ever_token) {
+        first_ever_token = FALSE;  // Clear flag
+        
+        if (flash_timer_id > 0) {
+            g_source_remove(flash_timer_id);
+            flash_timer_id = 0;
+        }
+        if (flash_delay_id > 0)
+            g_source_remove(flash_delay_id);
+        
+        flash_delay_id = g_timeout_add(300, trigger_flash_after_delay, NULL);
     }
-    if (flash_delay_id > 0)
-        g_source_remove(flash_delay_id);
-    
-    flash_delay_id = g_timeout_add(300, trigger_flash_after_delay, NULL);
+    // Otherwise it's history reload - no flash
     
     return G_SOURCE_REMOVE;
 }
@@ -777,13 +784,24 @@ static void *serial_reader_thread(void *arg)
                             first_token_received = TRUE;
                             
                             if (is_bulk_arrival) {
-                                // Start of bulk load
+                                // Start of bulk load (startup)
                                 bulk_loading = TRUE;
                                 number_visible = FALSE;  // Hide numbers during bulk
                             } else {
-                                // Single first token
+                                // Single first token on startup - flash it
                                 bulk_loading = FALSE;
                                 number_visible = TRUE;
+                                first_ever_token = FALSE;  // Mark that we've shown first token
+                                
+                                // Trigger flash
+                                if (flash_timer_id > 0) {
+                                    g_source_remove(flash_timer_id);
+                                    flash_timer_id = 0;
+                                }
+                                if (flash_delay_id > 0)
+                                    g_source_remove(flash_delay_id);
+                                
+                                flash_delay_id = g_timeout_add(300, trigger_flash_after_delay, NULL);
                             }
                         } else {
                             if (is_bulk_arrival) {
@@ -800,7 +818,7 @@ static void *serial_reader_thread(void *arg)
                             } else {
                                 // Single token (normal operation)
                                 if (bulk_loading) {
-                                    // Just finished bulk loading - this is the last token
+                                    // Just finished bulk loading - simply show tokens without flash
                                     if (bulk_finish_timer_id > 0) {
                                         g_source_remove(bulk_finish_timer_id);
                                         bulk_finish_timer_id = 0;
@@ -838,6 +856,7 @@ static void *serial_reader_thread(void *arg)
                             clear_tokens();
                             first_token_received = FALSE;  // Reset state
                             bulk_loading = FALSE;
+                            first_ever_token = TRUE;  // Reset for next game
                             tty2_active = TRUE;
                             tty4_active = FALSE;
 
