@@ -1061,11 +1061,11 @@ int main(int argc, char *argv[]) {
         gtk_paned_pack2(GTK_PANED(top_pane), content_overlay, TRUE, TRUE);
     }
     
-    // HIDE ALL TOKEN WIDGETS initially - we only want top label, please wait, and ticker
+    // HIDE ALL TOKEN WIDGETS on startup - we only want top label, please wait, and ticker
     gtk_widget_hide(current_image);
     gtk_widget_hide(previous_image);
     gtk_widget_hide(preceding_image);
-    // Keep outermost visible initially (will be hidden during bulk load)
+    gtk_widget_hide(outermost);  // Hide entire token display area on startup
     
     gtk_widget_show(please_wait_label);  // Show "Please wait..." on startup
     
