@@ -189,11 +189,11 @@ static char *read_config_value(const char *path, const char *key) {
 
             *end = '\0';
 
-            if ((val[0] == '"' && *(end - 1) == '"') ||
-                (val[0] == '\' && *(end - 1) == '\'')) {
-                val++;
-                *(end - 1) = '\0';
-            }
+            if ((val[0] == '"'  && *(end - 1) == '"') ||
+    (val[0] == '\'' && *(end - 1) == '\'')) {
+    val++;
+    *(end - 1) = '\0';
+}
 
             result = strdup(val);
             break;
