@@ -3,6 +3,7 @@
 //  FIXED: GIF Auto-Hide After Completion
 //  FIXED: No flashing on bulk token arrivals
 //  ENHANCED: "Please wait..." display with smart bulk handling
+//  FIXED: Token positioning after overlay structure changes
 // ==========================
 
 #include <gtk/gtk.h>
@@ -544,18 +545,25 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_paned_set_wide_handle(GTK_PANED(outer), FALSE);
     gtk_paned_set_wide_handle(GTK_PANED(inner), FALSE);
 
+    // Get screen dimensions for more accurate calculations
+    GdkScreen *screen = gdk_screen_get_default();
+    int screen_width = gdk_screen_get_width(screen);
+    int screen_height = gdk_screen_get_height(screen);
+
     GtkAllocation top_alloc, outermost_alloc, outer_alloc, inner_alloc;
     gtk_widget_get_allocation(top_pane, &top_alloc);
     gtk_widget_get_allocation(outermost, &outermost_alloc);
     gtk_widget_get_allocation(outer, &outer_alloc);
     gtk_widget_get_allocation(inner, &inner_alloc);
 
-    if (top_alloc.height == 0) top_alloc.height = 100;
-    if (outermost_alloc.height == 0) outermost_alloc.height = 800;
-    if (outer_alloc.width == 0) outer_alloc.width = 1200;
-    if (inner_alloc.height == 0) inner_alloc.height = 600;
+    // Use screen dimensions if allocations aren't ready
+    if (top_alloc.height == 0) top_alloc.height = screen_height;
+    if (outermost_alloc.height == 0) outermost_alloc.height = screen_height * 0.89;
+    if (outer_alloc.width == 0) outer_alloc.width = screen_width;
+    if (inner_alloc.height == 0) inner_alloc.height = screen_height * 0.75;
 
-    gtk_paned_set_position(GTK_PANED(top_pane), top_alloc.height * 0.11);
+    // Adjusted ratios to compensate for overlay structure
+    gtk_paned_set_position(GTK_PANED(top_pane), screen_height * 0.11);
     gtk_paned_set_position(GTK_PANED(outermost), outermost_alloc.height * 0.85);
     gtk_paned_set_position(GTK_PANED(outer), outer_alloc.width * 0.71);
     gtk_paned_set_position(GTK_PANED(inner), inner_alloc.height * 0.65);
@@ -564,8 +572,8 @@ static gboolean set_paned_ratios(gpointer user_data) {
     gtk_widget_show(ticker_fixed);
     gtk_widget_show(ticker_label);
 
-    int top_font_size = (int)(outermost_alloc.height * 0.08 * 0.9 * PANGO_SCALE);
-    int ticker_font_size = (int)(outermost_alloc.height * 0.042 * 0.9 * PANGO_SCALE);
+    int top_font_size = (int)(screen_height * 0.08 * 0.9 * PANGO_SCALE);
+    int ticker_font_size = (int)(screen_height * 0.042 * 0.9 * PANGO_SCALE);
 
     const char *plain = gtk_label_get_text(GTK_LABEL(top_label));
     if (!plain) plain = "";
@@ -592,12 +600,8 @@ static gboolean set_paned_ratios(gpointer user_data) {
         g_idle_add(refresh_images_on_ui, NULL);
     }
     
-    // CRITICAL: Lock ticker_fixed to its parent's width
-    GtkAllocation parent_alloc;
-    gtk_widget_get_allocation(top_pane, &parent_alloc);  // Use top_pane width
-    if (parent_alloc.width > 100) {
-        gtk_widget_set_size_request(ticker_fixed, parent_alloc.width, 60);
-    }
+    // CRITICAL: Lock ticker_fixed to full screen width
+    gtk_widget_set_size_request(ticker_fixed, screen_width, 60);
     
     // DON'T set size_request on ticker_label yet - let it measure naturally first
     gtk_widget_set_size_request(ticker_label, -1, 60);
