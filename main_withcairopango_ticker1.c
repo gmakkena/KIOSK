@@ -530,7 +530,7 @@ gboolean finalize_ticker_setup(gpointer data) {
 
 static gboolean refresh_images_on_ui(gpointer user_data) {
     // Current Image uses the number_visible flag
-    GdkPixbuf *pb1 = render_token_pixbuf_cairo(current_image, current_token, "Current Draw", "#FFDAB9", "#FF0000", "#333333", 0.65, 0.15, -0.08, 0.03, -0.05, 0.41, "Liberation Sans Bold", "Liberation Sans", number_visible);
+    GdkPixbuf *pb1 = render_token_pixbuf_cairo(current_image, current_token, "Current Draw", "#FFDAB9", "#FF0000", "#333333", 0.63, 0.12, -0.05, 0.01, -0.05, 0.41, "Liberation Sans Bold", "Liberation Sans", number_visible);
     
     // History images always show their numbers
     GdkPixbuf *pb2 = render_token_pixbuf_cairo(previous_image, previous_token, "Previous Draw", "#FFDAB9", "#0000FF", "#555555", 0.50, 0.07, -0.04, 0.03, -0.06, 0.30, "Liberation Sans Bold", "Liberation Sans", TRUE);
