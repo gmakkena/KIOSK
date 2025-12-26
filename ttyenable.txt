@@ -1,0 +1,22 @@
+sudo systemctl edit getty@tty5
+
+[Service]
+ExecStart=
+ExecStart=/bin/sh -c 'exec /usr/bin/mpv \
+  --really-quiet \
+  --loop-file=inf \
+  --no-audio \
+  --vo=drm \
+  /home/pi/KIOSK/Please_wait.gif'
+
+TTYPath=/dev/tty5
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYReset=no
+TTYVHangup=no
+TTYVTDisallocate=no
+
+sudo systemctl daemon-reexec
+sudo systemctl restart getty@tty5
+systemctl status getty@tty5
