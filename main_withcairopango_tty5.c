@@ -810,12 +810,6 @@ static void *serial_reader_thread(void *arg)
                                 number_visible = TRUE;
                                 first_ever_token = FALSE;  // Mark that we've shown first token
                                 
-                                // Show token display and widgets
-                                if (outermost)
-                                    gtk_widget_show(outermost);
-                                gtk_widget_show(current_image);
-                                gtk_widget_show(previous_image);
-                                gtk_widget_show(preceding_image);
                                 
                                 // Trigger flash
                                 if (flash_timer_id > 0) {
@@ -857,12 +851,7 @@ static void *serial_reader_thread(void *arg)
                                     // Regular single token - flash it
                                     number_visible = TRUE;
                                     
-                                    // Show token display and widgets
-                                    if (outermost)
-                                        gtk_widget_show(outermost);
-                                    gtk_widget_show(current_image);
-                                    gtk_widget_show(previous_image);
-                                    gtk_widget_show(preceding_image);
+                                    
                                     
                                     if (flash_timer_id > 0) {
                                         g_source_remove(flash_timer_id);
@@ -1053,10 +1042,10 @@ int main(int argc, char *argv[]) {
     gtk_widget_show_all(window);
     
     // CRITICAL: Hide widgets AFTER show_all, otherwise they get shown again
-    gtk_widget_hide(current_image);
-    gtk_widget_hide(previous_image);
-    gtk_widget_hide(preceding_image);
-    gtk_widget_hide(outermost);  // Hide entire token display area on startup
+    //gtk_widget_hide(current_image);
+    //gtk_widget_hide(previous_image);
+    //gtk_widget_hide(preceding_image);
+    //gtk_widget_hide(outermost);  // Hide entire token display area on startup
     gtk_widget_hide(gif_area);   // Hide GIF area
 
     // ---------------- Fullscreen Window ----------------
