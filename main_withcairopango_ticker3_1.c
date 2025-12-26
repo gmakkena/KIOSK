@@ -508,7 +508,7 @@ static gboolean refresh_images_on_ui(gpointer user_data) {
     GdkPixbuf *pb1 = render_token_pixbuf_cairo(current_image, 
         current_token, "Current Draw", 
         "#FFDAB9", "#FF0000", "#333333", 
-        0.65, 0.15, -0.08, 0.03, -0.05, 0.41, 
+        0.63, 0.12, -0.05, 0.01, -0.05, 0.41, 
         "Liberation Sans Bold", "Liberation Sans", 
         number_visible);
     
